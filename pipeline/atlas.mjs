@@ -26,7 +26,8 @@ const CATEGORIES = [
   { type: 'desert', classes: ['Q8514'], per: 4, min: 4 },
   { type: 'national_park', classes: ['Q46169'], per: 8, min: 5 },
   // ciudades: sin subclases (la consulta sería demasiado pesada) y con población mínima
-  { type: 'city', classes: ['Q515', 'Q1549591', 'Q5119', 'Q1637706', 'Q200250'], per: 15, min: 15, direct: true, minPop: 50000 },
+  // ciudades: varias clases (ciudad, gran ciudad, capital, ciudad con rango de condado, municipio urbano…)
+  { type: 'city', classes: ['Q515', 'Q1549591', 'Q5119', 'Q1637706', 'Q200250', 'Q13218690', 'Q15284', 'Q3957', 'Q7930989'], per: 15, min: 15, direct: true, minPop: 50000 },
   // iglesias: catedrales y basílicas ("iglesia" genérica tiene demasiados elementos y la consulta se corta)
   { type: 'church', classes: ['Q2977', 'Q163687', 'Q120560', 'Q56242215'], per: 6, min: 8, direct: true },
   { type: 'mosque', classes: ['Q32815'], per: 6, min: 8 },
@@ -69,7 +70,7 @@ async function sparql(query) {
 
 const qid = (uri) => uri.split('/').pop()
 
-const EXTRA_COLS = { volcanic: 'INTEGER', dissolved: 'INTEGER', ccs: 'TEXT', area_km2: 'REAL', discharge: 'REAL', basin_km2: 'REAL', prominence: 'REAL', depth: 'REAL', visitors: 'INTEGER', countries: 'INTEGER' }
+const EXTRA_COLS = { gvp: 'INTEGER', volcanic: 'INTEGER', dissolved: 'INTEGER', ccs: 'TEXT', area_km2: 'REAL', discharge: 'REAL', basin_km2: 'REAL', prominence: 'REAL', depth: 'REAL', visitors: 'INTEGER', countries: 'INTEGER' }
 
 export function ensureAtlasTable(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS atlas (
@@ -83,34 +84,78 @@ export function ensureAtlasTable(db) {
   for (const [c, t] of Object.entries(EXTRA_COLS)) if (!cols.has(c)) db.exec(`ALTER TABLE atlas ADD COLUMN ${c} ${t}`)
 }
 
-/** Métricas de Wikidata (normalizadas al SI) de una lista de lugares ya guardados. */
+/**
+ * Métricas de Wikidata de los lugares ya guardados. Una consulta pequeña por
+ * dato (una sola con todo multiplicaba las combinaciones y Wikidata la cortaba).
+ */
 async function fetchMetrics(db, ids) {
-  const set = db.prepare(`UPDATE atlas SET area_km2 = ?, discharge = ?, basin_km2 = ?, prominence = ?, depth = ?, visitors = ?, countries = ?, ccs = ?, volcanic = ?, dissolved = ? WHERE qid = ?`)
-  // población más reciente (no la mayor: algunas ciudades heredan la cifra de su estado)
+  const quantity = (prop, col, div = 1) => ({
+    col,
+    q: (vals) => `SELECT ?item (MAX(?v) AS ?x) WHERE { VALUES ?item { ${vals} } ?item p:${prop}/psn:${prop}/wikibase:quantityAmount ?v . } GROUP BY ?item`,
+    map: (r) => Math.round((Number(r.x.value) / div) * 10) / 10,
+  })
+  const METRICS = [
+    quantity('P2046', 'area_km2', 1e6),
+    quantity('P2225', 'discharge'),
+    quantity('P2053', 'basin_km2', 1e6),
+    quantity('P2660', 'prominence'),
+    quantity('P4511', 'depth'),
+    { col: 'gvp', q: (vals) => `SELECT ?item (SAMPLE(?v) AS ?x) WHERE { VALUES ?item { ${vals} } ?item wdt:P1886 ?v . } GROUP BY ?item`, map: (r) => Number(r.x.value) },
+    { col: 'visitors', q: (vals) => `SELECT ?item (MAX(?v) AS ?x) WHERE { VALUES ?item { ${vals} } ?item wdt:P1174 ?v . } GROUP BY ?item`, map: (r) => Math.round(Number(r.x.value)) },
+    {
+      col: 'ccs',
+      q: (vals) => `SELECT ?item (GROUP_CONCAT(DISTINCT ?iso; separator=",") AS ?x) WHERE { VALUES ?item { ${vals} } ?item wdt:P17 ?c . ?c wdt:P297 ?iso . } GROUP BY ?item`,
+      map: (r) => r.x.value.toLowerCase(),
+      also: (r) => ['countries', r.x.value.split(',').length],
+    },
+    // es volcán: por clase (hasta 3 niveles) o por tener número del Programa Global de
+    // Vulcanismo del Smithsonian (Ojos del Salado o Pissis solo constan como "montaña")
+    { col: 'volcanic', q: (vals) => `SELECT DISTINCT ?item (1 AS ?x) WHERE { VALUES ?item { ${vals} } { ?item wdt:P31/wdt:P279?/wdt:P279?/wdt:P279? wd:Q8072 . } UNION { ?item wdt:P1886 ?gvp . } }`, map: () => 1 },
+    // ya no existe: fecha de disolución o clase "paleo-/former/historical/ancient" (lago Tauca…)
+    {
+      col: 'dissolved',
+      // 2 = clase paleo/antigua (desaparecido de verdad); 1 = solo fecha de disolución
+      q: (vals) => `SELECT ?item (MAX(?k) AS ?x) WHERE { VALUES ?item { ${vals} }
+        { ?item wdt:P576 ?end . BIND(1 AS ?k) } UNION { ?item wdt:P31 ?c . ?c rdfs:label ?l . FILTER(lang(?l) = "en" && REGEX(?l, "^(paleo|palaeo|former|historical|ancient|extinct lake)", "i")) BIND(2 AS ?k) } } GROUP BY ?item`,
+      map: (r) => Number(r.x.value),
+    },
+  ]
+  for (const m of METRICS) {
+    const set = db.prepare(`UPDATE atlas SET ${m.col} = ? WHERE qid = ?`)
+    let got = 0
+    let failed = 0
+    for (let i = 0; i < ids.length; i += 150) {
+      const chunk = ids.slice(i, i + 150)
+      const rows = await sparql(m.q(chunk.map((q) => `wd:${q}`).join(' '))).catch(() => {
+        failed++
+        return []
+      })
+      tx(db, () => {
+        for (const r of rows) {
+          if (!r.x) continue
+          set.run(m.map(r), qid(r.item.value))
+          if (m.also) {
+            const [c, v] = m.also(r)
+            db.prepare(`UPDATE atlas SET ${c} = ? WHERE qid = ?`).run(v, qid(r.item.value))
+          }
+          got++
+        }
+      })
+      await sleep(300)
+    }
+    console.log(`[atlas] métrica ${m.col.padEnd(11)} ${got} lugares${failed ? ` · ${failed} consultas fallidas` : ''}`)
+  }
+  // población: la cifra más reciente (no la mayor)
   const setPop = db.prepare('UPDATE atlas SET population = ? WHERE qid = ?')
-  for (let i = 0; i < ids.length; i += 120) {
-    const chunk = ids.slice(i, i + 120)
-    const rows = await sparql(`SELECT ?item (MAX(?a) AS ?area) (MAX(?q) AS ?dis) (MAX(?b) AS ?basin) (MAX(?p) AS ?prom) (MAX(?d) AS ?depth)
-        (MAX(?v) AS ?vis) (COUNT(DISTINCT ?ctry) AS ?nc) (GROUP_CONCAT(DISTINCT ?iso; separator=",") AS ?isos)
-        (MAX(?vo) AS ?volc) (MAX(?gone) AS ?dis) WHERE {
-      VALUES ?item { ${chunk.map((q) => `wd:${q}`).join(' ')} }
-      OPTIONAL { ?item p:P2046/psn:P2046/wikibase:quantityAmount ?a }
-      OPTIONAL { ?item p:P2225/psn:P2225/wikibase:quantityAmount ?q }
-      OPTIONAL { ?item p:P2053/psn:P2053/wikibase:quantityAmount ?b }
-      OPTIONAL { ?item p:P2660/psn:P2660/wikibase:quantityAmount ?p }
-      OPTIONAL { ?item p:P4511/psn:P4511/wikibase:quantityAmount ?d }
-      OPTIONAL { ?item wdt:P1174 ?v }
-      OPTIONAL { ?item wdt:P17 ?ctry . OPTIONAL { ?ctry wdt:P297 ?iso } }
-      OPTIONAL { ?item wdt:P31/wdt:P279* wd:Q8072 . BIND(1 AS ?vo) }
-      OPTIONAL { ?item wdt:P576 ?end . BIND(1 AS ?gone) }
-    } GROUP BY ?item`).catch(() => [])
-    // población más reciente de cada lugar
-    const pops = await sparql(`SELECT ?item ?pop ?t WHERE {
+  let pops = 0
+  for (let i = 0; i < ids.length; i += 150) {
+    const chunk = ids.slice(i, i + 150)
+    const rows = await sparql(`SELECT ?item ?pop ?t WHERE {
       VALUES ?item { ${chunk.map((q) => `wd:${q}`).join(' ')} }
       ?item p:P1082 ?st . ?st ps:P1082 ?pop . OPTIONAL { ?st pq:P585 ?t }
     }`).catch(() => [])
     const latest = new Map()
-    for (const r of pops) {
+    for (const r of rows) {
       const id = qid(r.item.value)
       const t = r.t?.value ? Date.parse(r.t.value) : 0
       const prev = latest.get(id)
@@ -119,19 +164,10 @@ async function fetchMetrics(db, ids) {
     tx(db, () => {
       for (const [id, v] of latest) setPop.run(v.pop, id)
     })
-    tx(db, () => {
-      for (const r of rows) {
-        const num = (x, div = 1) => (x?.value ? Math.round((Number(x.value) / div) * 10) / 10 : null)
-        set.run(
-          num(r.area, 1e6), num(r.dis), num(r.basin, 1e6), num(r.prom), num(r.depth), r.vis ? Math.round(Number(r.vis.value)) : null,
-          Number(r.nc?.value ?? 0) || null, r.isos?.value ? r.isos.value.toLowerCase() : null,
-          r.volc ? 1 : 0, r.dis ? 1 : 0, qid(r.item.value),
-        )
-      }
-    })
-    if ((i / 120) % 10 === 0) console.log(`[atlas] métricas ${Math.min(i + 120, ids.length)}/${ids.length}`)
-    await sleep(600)
+    pops += latest.size
+    await sleep(300)
   }
+  console.log(`[atlas] métrica population  ${pops} lugares (cifra más reciente)`)
 }
 
 export async function atlas(db, { only } = {}) {
@@ -175,7 +211,7 @@ export async function atlas(db, { only } = {}) {
       VALUES ?item { ${chunk.map((q) => `wd:${q}`).join(' ')} }
       OPTIONAL { ?item wdt:P625 ?coord }
       OPTIONAL { ?item rdfs:label ?es FILTER(lang(?es) = "es") }
-      OPTIONAL { ?item rdfs:label ?en FILTER(lang(?en) = "en") }
+      OPTIONAL { ?item rdfs:label ?en FILTER(lang(?en) = "en" || lang(?en) = "mul") }
       OPTIONAL { ?item schema:description ?desc FILTER(lang(?desc) = "es") }
       OPTIONAL { ?item wdt:P18 ?img }
       OPTIONAL { ?item p:P2044/psn:P2044/wikibase:quantityAmount ?ele }
@@ -207,6 +243,50 @@ export async function atlas(db, { only } = {}) {
   }
 
 
+  // ── nombres que faltan: Wikidata guarda muchos en la etiqueta multilingüe "mul" ──
+  if (only?.includes('nombres')) {
+    const ids = db.prepare('SELECT qid FROM atlas WHERE name_es IS NULL AND name_en IS NULL').all().map((r) => r.qid)
+    const set = db.prepare('UPDATE atlas SET name_es = COALESCE(name_es, ?), name_en = COALESCE(name_en, ?) WHERE qid = ?')
+    let got = 0
+    for (let i = 0; i < ids.length; i += 200) {
+      const rows = await sparql(`SELECT ?item (SAMPLE(?es) AS ?les) (SAMPLE(?en) AS ?len) (SAMPLE(?mul) AS ?lmul) (SAMPLE(?any) AS ?lany) WHERE {
+        VALUES ?item { ${ids.slice(i, i + 200).map((q) => `wd:${q}`).join(' ')} }
+        OPTIONAL { ?item rdfs:label ?es FILTER(lang(?es) = "es") }
+        OPTIONAL { ?item rdfs:label ?en FILTER(lang(?en) = "en") }
+        OPTIONAL { ?item rdfs:label ?mul FILTER(lang(?mul) = "mul") }
+        OPTIONAL { ?item rdfs:label ?any FILTER(lang(?any) IN ("fr", "de", "pt", "it", "ca")) }
+      } GROUP BY ?item`).catch(() => [])
+      tx(db, () => {
+        for (const r of rows) {
+          const en = r.len?.value ?? r.lmul?.value ?? r.lany?.value ?? null
+          if (!r.les && !en) continue
+          set.run(r.les?.value ?? null, en, qid(r.item.value))
+          got++
+        }
+      })
+      await sleep(400)
+    }
+    return console.log(`[atlas] ✓ nombres de ${got} de ${ids.length} lugares sin nombre`)
+  }
+
+  // ── lugares de las pistas que no están en el atlas: se unen por su QID ──
+  if (only?.includes('unir')) {
+    const cols = new Set(db.prepare('PRAGMA table_info(place_info)').all().map((c) => c.name))
+    if (cols.has('qid')) {
+      const rows = db
+        .prepare(
+          `SELECT i.qid, MIN(hp.cc) cc, MIN(i.type) type, MAX(i.sitelinks) sl FROM place_info i
+           JOIN hint_places hp ON lower(COALESCE(hp.cc, '')) || '|' || lower(trim(hp.query)) = i.key
+           WHERE i.qid IS NOT NULL AND i.qid NOT IN (SELECT qid FROM atlas) AND hp.cc IS NOT NULL
+           GROUP BY i.qid`,
+        )
+        .all()
+      for (const r of rows) picked.set(r.qid, { cc: r.cc, type: r.type ?? 'other', sl: r.sl ?? 0 })
+      console.log(`[atlas] unir: ${rows.length} lugares de las pistas`)
+      await saveDetails([...picked.keys()])
+    }
+  }
+
   // ── imprescindibles del mundo: listas de referencia, sin depender de GeoGuessr ──
   if (only?.includes('mundial')) {
     const WORLD = [
@@ -237,6 +317,11 @@ export async function atlas(db, { only } = {}) {
       { type: 'heritage', unesco: true, by: 'sl', n: 300 },
     ]
     const known = new Set(db.prepare('SELECT qid FROM atlas').all().map((r) => r.qid))
+    // imprescindibles que Wikidata clasifica de forma que las consultas no los encuentran
+    const MUST = [
+      { qid: 'Q4148644', type: 'island', cc: 'gl' }, // isla de Groenlandia
+    ]
+    for (const m of MUST) if (!known.has(m.qid)) picked.set(m.qid, { cc: m.cc, type: m.type, sl: 200 })
     for (const w of WORLD) {
       const cls = w.unesco ? '?item wdt:P1435 wd:Q9259 .' : `VALUES ?cls { ${w.classes.map((q) => `wd:${q}`).join(' ')} } ?item wdt:P31 ?cls .`
       const val =
@@ -265,7 +350,7 @@ export async function atlas(db, { only } = {}) {
   }
 
   let eleOf = null
-  for (const c of CATEGORIES.filter((x) => (!only || only.includes(x.type)) && !only?.includes('mundial'))) {
+  for (const c of CATEGORIES.filter((x) => (!only || only.includes(x.type)) && !only?.includes('mundial') && !only?.includes('unir'))) {
     eleOf = null
     const values = c.classes.map((q) => `wd:${q}`).join(' ')
     const rows = await sparql(`SELECT DISTINCT ?item ?sl ?cc ${c.tallest ? '?ele' : ''} WHERE {
@@ -327,7 +412,7 @@ export async function atlas(db, { only } = {}) {
     await sleep(1500)
   }
   // sitios UNESCO (todos los del país), como monumentos si no estaban ya
-  if ((!only || only.includes('unesco')) && !only?.includes('mundial')) {
+  if ((!only || only.includes('unesco')) && !only?.includes('mundial') && !only?.includes('unir')) {
     let rows = await sparql(`SELECT ?item ?sl ?cc WHERE {
       ?item wdt:P1435 wd:Q9259; wikibase:sitelinks ?sl; wdt:P625 ?coord; wdt:P17 ?c . ?c wdt:P297 ?cc .
     }`).catch(() => [])
