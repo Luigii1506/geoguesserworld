@@ -87,6 +87,8 @@ function filters(p, { skipKind = false, skipTags = false, skipHints = false } = 
   }
   if (p.get('hints') === '1' && !skipHints) where.push('e.hints > 0')
   if (p.get('photo') === '1') where.push('e.thumb IS NOT NULL')
+  // conocidos: con artículo en al menos 20 Wikipedias
+  if (p.get('famous') === '1') where.push('e.fame >= 20')
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params }
 }
 
@@ -131,7 +133,7 @@ async function withFacts(db, rows) {
   return rows.map((r) => card(r, facts.get(r.id)))
 }
 
-const SORTS = { rank: 'e.rank DESC', name: 'e.name COLLATE NOCASE ASC', hints: 'e.hints DESC, e.rank DESC', fame: 'e.fame DESC' }
+const SORTS = { rank: 'e.rank DESC', name: 'e.name COLLATE NOCASE ASC', hints: 'e.hints DESC, e.rank DESC', fame: 'e.fame DESC', random: 'random()' }
 
 export async function listEntities(db, p) {
   const limit = int(p.get('limit'), 36, MAX_LIMIT)

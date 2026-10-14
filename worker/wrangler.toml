@@ -12,4 +12,4 @@ bucket_name = "geoguesser"
 [[d1_databases]]
 binding = "GEO"
 database_name = "geomastery-geo"
-database_id = "pendiente"
+database_id = "c78376e8-a415-4181-8951-22da81498769"
