@@ -9,6 +9,7 @@ import { imageSrc } from '../lib/images'
 import { countryStreetView } from '../data/capitals'
 import { HintItem, Lightbox, Loading, MissingData, ObjectProfile, PhotoTiles } from '../components/ui'
 import { HintList, Variants, mainObjects, variantObjects } from '../components/guide'
+import { CountryTerrain } from '../components/geo/CountryTerrain'
 
 // La guía de un país es una sola página continua, como una landing:
 //   1 Reconócelo · 2 No lo confundas · 3 Ubícate · y la biblioteca entera,
@@ -633,6 +634,10 @@ export default function CountryGuide() {
                     </p>
                   </div>
                 </header>
+                <div className="cg-terrain">
+                  <h3>Relieve, terreno, cultivos y clima</h3>
+                  {code && <CountryTerrain cc={code} />}
+                </div>
                 {g.regions.length > 0 && (
                   <>
                     <div className="regions">

@@ -32,7 +32,7 @@ export const byImportance = (a: Cluster, b: Cluster) =>
   (b.usefulness ?? 0) - (a.usefulness ?? 0) || (a.region ? 1 : 0) - (b.region ? 1 : 0) ||
   b.source_count - a.source_count || b.size - a.size
 
-export type Tile = { image: string; caption?: string | null }
+export type Tile = { image: string; caption?: string | null; sv?: Hint['sv']; source?: string; url?: string | null }
 export type Part = { sub: string | null; hints: Cluster[]; minor: Cluster[]; tiles: Tile[] }
 export type Topic = {
   cat: string
@@ -92,7 +92,7 @@ export function useGuide(code: string | undefined) {
         const h = hints.get(c.canonical_id)!
         const caption = textOf(c) ? h.title ?? textOf(c) : null
         const imgs = imagesOf(c)
-        part(c.category, sub).tiles.push(...imgs.map((image) => ({ image, caption })))
+        part(c.category, sub).tiles.push(...imgs.map((image) => ({ image, caption, sv: h.sv, source: h.source_id, url: h.url })))
         t.n++
         t.cover ??= imgs[0] ?? null
         continue

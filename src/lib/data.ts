@@ -79,8 +79,10 @@ export interface Hint {
   images: string[]
   /** enlaces a ejemplos que la fuente incluye dentro del texto */
   links?: { text: string; url: string }[]
-  /** lugares que menciona, con coordenadas (para verlos en un mapa) */
-  places?: { n: string; es?: string; lat: number; lng: number; k?: string }[]
+  /** vista de Street View del ejemplo (panorámica, ángulo, inclinación y campo de visión) */
+  sv?: { p: string | null; lat: number; lng: number; h: number; t: number; f: number }
+  /** lugares que menciona, con coordenadas y su entidad de la base geográfica (id) */
+  places?: { id?: string; n: string; es?: string; lat: number; lng: number; k?: string; cc?: string }[]
 }
 
 export interface Resource {

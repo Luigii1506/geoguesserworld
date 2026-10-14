@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { Cluster, CountryRow, Hint, MetaObject } from '../lib/data'
-import { countryFlag, countryLabel, useCountryFile, useCountryMap, useJson } from '../lib/data'
+import { countryFlag, countryLabel, useCountryFile, useCountryMap } from '../lib/data'
 import { hintText, type Lang } from '../lib/i18n'
 import { fetchPlaceWiki, type PlaceWiki } from '../lib/wiki'
 import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, USEFULNESS, VARIANT_LABEL, attrLabel, valueLabel } from '../lib/labels'
 import { imageSrc } from '../lib/images'
+import { geo, useGeo } from '../lib/geo'
+import { entityMetrics, kindCount, kindLabel } from '../lib/geoFormat'
 
 export function CountryChip({ code, map, to }: { code: string; map: Map<string, CountryRow>; to?: string }) {
   return (
@@ -220,8 +222,9 @@ export function HintText({ text, places, onPlace }: { text: string; places?: { n
 }
 
 /** Fotos con pie (marcas, variantes de matrícula…): imagen completa y su nombre debajo. */
-export function PhotoTiles({ items, limit = 12 }: { items: { image: string; caption?: string | null }[]; limit?: number }) {
+export function PhotoTiles({ items, limit = 12 }: { items: { image: string; caption?: string | null; sv?: Hint['sv']; source?: string; url?: string | null }[]; limit?: number }) {
   const [box, setBox] = useState<number | null>(null)
+  const [svAt, setSvAt] = useState<number | null>(null)
   const [all, setAll] = useState(false)
   if (!items.length) return null
   const shown = all ? items : items.slice(0, limit)
@@ -233,6 +236,11 @@ export function PhotoTiles({ items, limit = 12 }: { items: { image: string; capt
             <button className="shot" onClick={() => setBox(i)} aria-label="Ampliar imagen">
               <img src={imageSrc(it.image, 'thumb')} loading="lazy" alt={it.caption ?? ''} onError={(e) => hideBroken(e, '.tile')} />
             </button>
+            {it.sv && (
+              <button className="tile-sv" onClick={() => setSvAt(i)} aria-label="Ver en Street View">
+                <span className="sv-dot" />Street View
+              </button>
+            )}
             {it.caption && <figcaption>{it.caption}</figcaption>}
           </figure>
         ))}
@@ -240,6 +248,7 @@ export function PhotoTiles({ items, limit = 12 }: { items: { image: string; capt
           <button className="shot shot-more tile-more" onClick={() => setAll(true)}>+{items.length - limit} más</button>
         )}
       </div>
+      {svAt !== null && items[svAt]?.sv && <SvModal sv={items[svAt].sv!} title={items[svAt].caption ?? 'Ejemplo'} credit={items[svAt].source} onClose={() => setSvAt(null)} />}
       {box !== null && (
         <Lightbox
           images={items.map((it) => it.image)}
@@ -249,6 +258,58 @@ export function PhotoTiles({ items, limit = 12 }: { items: { image: string; capt
         />
       )}
     </>
+  )
+}
+
+type SV = NonNullable<Hint['sv']>
+/**
+ * Street View incrustado en la vista exacta del ejemplo (la forma que Google
+ * permite: insertar, no copiar capturas). Solo se carga al pedirlo.
+ */
+export function StreetViewEmbed({ sv, startOpen = false }: { sv: SV; startOpen?: boolean }) {
+  const [open, setOpen] = useState(startOpen)
+  // formato de "Compartir → Insertar mapa" de Google Maps (sin clave)
+  const zoom = Math.max(0, Math.min(3, Math.log2(90 / Math.max(10, sv.f)) + 1)).toFixed(2)
+  const src = sv.p
+    ? `https://www.google.com/maps/embed?pb=!4v1!6m8!1m7!1s${encodeURIComponent(sv.p)}!2m2!1d${sv.lat}!2d${sv.lng}!3f${sv.h}!4f${sv.t}!5f${zoom}`
+    : `https://maps.google.com/maps?q=&layer=c&cbll=${sv.lat},${sv.lng}&cbp=11,${sv.h},0,0,${sv.t}&output=svembed`
+  const link = `https://www.google.com/maps/@?api=1&map_action=pano${sv.p ? `&pano=${sv.p}` : ''}&viewpoint=${sv.lat},${sv.lng}&heading=${sv.h}&pitch=${sv.t}&fov=${sv.f}`
+  if (!open)
+    return (
+      <button className="sv-open" onClick={() => setOpen(true)}>
+        <span className="sv-dot" />Ver el ejemplo en Street View
+      </button>
+    )
+  return (
+    <div className="sv">
+      <iframe src={src} title="Street View del ejemplo" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" />
+      <div className="sv-bar">
+        <span>Street View · Google</span>
+        <a href={link} target="_blank" rel="noreferrer">Abrir en Google Maps</a>
+        <button className="link" onClick={() => setOpen(false)}>Cerrar</button>
+      </div>
+    </div>
+  )
+}
+
+/** Street View en un modal (desde una foto del mosaico). */
+function SvModal({ sv, title, credit, onClose }: { sv: SV; title: string; credit?: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="pm-box sv-box" onClick={(e) => e.stopPropagation()}>
+        <div className="pm-head">
+          <div><span className="eyebrow">Street View</span><strong>{title}</strong>{credit && <span className="pm-desc">Ejemplo de {SOURCE_NAMES[credit] ?? credit}</span>}</div>
+          <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <StreetViewEmbed sv={sv} startOpen />
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -268,6 +329,7 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
   const images = cluster.images ?? [...new Set(members.flatMap((m) => m.images))]
   const links = [...new Map(members.flatMap((m) => m.links ?? []).map((l) => [l.url, l])).values()]
   const places = [...new Map(members.flatMap((m) => m.places ?? []).map((p) => [p.n.toLowerCase(), p])).values()]
+  const sv = members.find((m) => m.sv?.p)?.sv ?? members.find((m) => m.sv)?.sv
   const [mapAt, setMapAt] = useState<number | null>(null)
   const text = hintText(canonical, lang)
   const sources = cluster.sources.map((s) => SOURCE_NAMES[s] ?? s)
@@ -276,6 +338,18 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
     <article className="hint">
       {text && <HintText text={text} places={places} onPlace={setMapAt} />}
       {images.length > 0 && <Gallery images={images} limit={6} strip />}
+      {images.length > 0 && (
+        <div className="img-credit">
+          Imágenes:{' '}
+          {[...new Map(members.filter((m) => m.images.length).map((m) => [m.source_id, m])).values()].map((m, i, arr) => (
+            <span key={m.source_id}>
+              {m.url ? <a href={m.url} target="_blank" rel="noreferrer">{SOURCE_NAMES[m.source_id] ?? m.source_id}</a> : SOURCE_NAMES[m.source_id] ?? m.source_id}
+              {i < arr.length - 1 ? ', ' : ''}
+            </span>
+          ))}
+        </div>
+      )}
+      {sv && <StreetViewEmbed sv={sv} />}
       {places.length > 0 && (
         <div className="hint-places">
           <span className="muted">En el mapa:</span>
@@ -444,20 +518,14 @@ export function ObjectProfile({ obj, map, traitCount }: {
   )
 }
 
+/** Lugar que se abre en la ficha: `id` es el de la entidad de la base geográfica (si se conoce). */
 export type Place = { id?: string; n: string; es?: string; lat: number; lng: number; k?: string; cc?: string }
-type PlaceDetail = { title: string; x: string; img: string | null; url: string | null; lang: string }
 // zoom del mapa según el tipo de lugar: una ciudad de cerca, un estado entero
 const PLACE_ZOOM: Record<string, number> = {
-  city: 11, town: 13, village: 14, neighbourhood: 14, area: 10, road: 9, natural: 9, island: 9, peninsula: 8, coast: 9, beach: 14,
-  region: 6, volcano: 11, mountain: 11, range: 7, river: 8, lake: 10, waterfall: 14, desert: 7, forest: 9, national_park: 10,
+  city: 11, town: 13, urban: 10, other: 9, natural: 9, island: 9, peninsula: 8, coast: 9, delta: 8, wetland: 9,
+  region: 6, admin1: 6, country: 5, volcano: 11, mountain: 11, range: 7, plain: 6, plateau: 6, desert: 6, basin: 6, valley: 8,
+  river: 8, lake: 10, waterfall: 14, forest: 9, national_park: 10,
   monument: 16, temple: 16, church: 16, mosque: 16, castle: 16, palace: 16, bridge: 15, archaeological: 15, landmark: 15,
-}
-export const PLACE_KIND: Record<string, string> = {
-  city: 'Ciudad', town: 'Pueblo', village: 'Aldea', neighbourhood: 'Barrio', area: 'Zona', road: 'Carretera', natural: 'Lugar natural',
-  island: 'Isla', peninsula: 'Península', coast: 'Costa', beach: 'Playa', region: 'Región', volcano: 'Volcán', mountain: 'Montaña',
-  range: 'Cordillera', river: 'Río', lake: 'Lago', waterfall: 'Cascada', desert: 'Desierto', forest: 'Bosque', national_park: 'Parque nacional',
-  monument: 'Monumento', temple: 'Templo', church: 'Iglesia', mosque: 'Mezquita', castle: 'Castillo', palace: 'Palacio', bridge: 'Puente',
-  archaeological: 'Sitio arqueológico', landmark: 'Lugar emblemático', other: 'Lugar',
 }
 
 /**
@@ -520,32 +588,38 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
   }, [onClose])
   const p = places[i]
   const label = (x: Place) => (lang === 'es' ? x.es ?? x.n : x.n)
-  // ficha guardada en la base de lugares (Wikipedia elegida por el pipeline); si no hay, se busca al momento
-  const stored = useJson<Record<string, PlaceDetail>>(p.cc ? `/community/places/${p.cc}.json` : null)
-  const saved = p.id && stored ? stored[p.id] : undefined
+  // ficha de la base geográfica (Wikipedia elegida por el pipeline, datos, región…); si no la hay, se busca al momento
+  const ent = useGeo(p.id ? `entity:${p.id}` : null, () => geo.entity(p.id!))
+  const e = ent.data?.id === p.id ? ent.data : undefined
   const ownHints = useCountryFile(hints ? undefined : p.cc)
   const hintPool = hints ?? (ownHints ? new Map(ownHints.hints.map((h) => [h.id, h])) : undefined)
   const countries = useCountryMap()
-  const country = p.cc ? countries.get(p.cc) : undefined
+  const country = p.cc ?? e?.cc ? countries.get((p.cc ?? e?.cc)!) : undefined
+  const pending = Boolean(p.id) && !e && !ent.error
+  const hasInfo = Boolean(e && (e.summary || e.image))
   useEffect(() => {
-    if (stored === undefined && p.cc) return // aún cargando la base
-    if (saved) return
+    if (pending || hasInfo) return
     let alive = true
     setFetched(undefined)
     fetchPlaceWiki(p.es ?? p.n, p.lat, p.lng).then((w) => alive && setFetched(w))
     return () => {
       alive = false
     }
-  }, [p.n, p.lat, p.lng, stored, saved]) // eslint-disable-line react-hooks/exhaustive-deps
-  const wiki: PlaceWiki | null | undefined = saved
-    ? { title: saved.title, description: (p as Place & { d?: string }).d ?? null, extract: saved.x, image: saved.img, pageUrl: saved.url ?? '', lang: saved.lang === 'en' ? 'en' : 'es' }
-    : fetched
+  }, [p.n, p.lat, p.lng, pending, hasInfo]) // eslint-disable-line react-hooks/exhaustive-deps
+  const wiki: PlaceWiki | null | undefined = e && hasInfo
+    ? { title: e.name, description: e.descr ?? null, extract: e.summary ?? '', image: e.image ?? null, pageUrl: e.wiki ?? '', lang: e.wiki_lang === 'en' ? 'en' : 'es' }
+    : pending
+      ? undefined
+      : fetched
+  const metrics = e ? entityMetrics(e) : []
+  const region = e?.parents.find((x) => x.predicate === 'in_admin1')
+  const within = e?.parents.filter((x) => x.predicate !== 'in_admin1') ?? []
 
   // pistas del país que mencionan este mismo lugar
   const key = p.n.toLowerCase()
   const seenText = new Set<string>()
   const related = [...(hintPool?.values() ?? [])]
-    .filter((h) => h.places?.some((x) => x.n.toLowerCase() === key))
+    .filter((h) => h.places?.some((x) => (p.id && x.id === p.id) || x.n.toLowerCase() === key))
     .map((h) => ({ h, text: placeSnippet(hintText(h, lang), p.es ?? p.n) ?? placeSnippet(hintText(h, lang), p.n) ?? placeSnippet(h.text ?? '', p.n) }))
     .filter((x): x is { h: Hint; text: string } => Boolean(x.text))
     .filter(({ text }) => {
@@ -556,9 +630,11 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
       return true
     })
     .slice(0, 6)
-  const zoom = wide ? 5 : PLACE_ZOOM[p.k ?? ''] ?? 9
-  const ll = `${p.lat},${p.lng}`
-  const kind = PLACE_KIND[p.k ?? ''] ?? 'Lugar'
+  const k = e?.kind ?? p.k ?? 'other'
+  const zoom = wide ? 5 : PLACE_ZOOM[k] ?? 9
+  // las coordenadas de la entidad mandan (las del mapa o la mención pueden ser aproximadas)
+  const ll = e && Number.isFinite(e.lat) ? `${e.lat},${e.lng}` : `${p.lat},${p.lng}`
+  const kind = kindLabel(k)
 
   return createPortal(
     <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
@@ -567,9 +643,13 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
           <div>
             <span className="eyebrow">{kind}</span>
             <strong>{label(p)}</strong>
-            {(wiki?.description ?? (p as Place & { d?: string }).d) && <span className="pm-desc">{wiki?.description ?? (p as Place & { d?: string }).d}</span>}
-            {(p as Place & { unesco?: boolean }).unesco && (
-              <span className="pm-facts"><em>Patrimonio de la Humanidad</em></span>
+            {(wiki?.description ?? e?.descr) && <span className="pm-desc">{wiki?.description ?? e?.descr}</span>}
+            {(e?.tags?.includes('unesco') || region || within.length > 0) && (
+              <span className="pm-facts">
+                {e?.tags?.includes('unesco') && <em>Patrimonio de la Humanidad</em>}
+                {region && <span>{region.name}</span>}
+                {within.map((x) => <span key={x.id}>{kindLabel(x.kind)}: {x.name}</span>)}
+              </span>
             )}
             {country &&
               (country.groups > 0 ? (
@@ -605,10 +685,20 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
             </div>
           </div>
 
-          {((p as Place & { metrics?: [string, string][] }).metrics ?? []).length > 0 && (
+          {e && Object.keys(e.children).length > 0 && (
+            <p className="pm-contains">
+              <span>Contiene</span>
+              {Object.entries(e.children)
+                .filter(([kind]) => kind !== 'admin1' || e.kind === 'country')
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6)
+                .map(([kind, n]) => <b key={kind}>{kindCount(kind, n)}</b>)}
+            </p>
+          )}
+          {metrics.length > 0 && (
             <dl className="pm-metrics">
-              {(p as Place & { metrics?: [string, string][] }).metrics!.map(([k, v]) => (
-                <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+              {metrics.map(([label, v]) => (
+                <div key={label}><dt>{label}</dt><dd>{v}</dd></div>
               ))}
             </dl>
           )}
@@ -617,7 +707,11 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
           ) : wiki ? (
             <div className="pm-wiki">
               <p>{clipSentences(wiki.extract, 620)}</p>
-              <a href={wiki.pageUrl} target="_blank" rel="noreferrer" className="muted small">Wikipedia{wiki.lang === 'en' ? ' (en inglés)' : ''} · CC BY-SA</a>
+              {wiki.pageUrl ? (
+                <a href={wiki.pageUrl} target="_blank" rel="noreferrer" className="muted small">Wikipedia{wiki.lang === 'en' ? ' (en inglés)' : ''} · CC BY-SA</a>
+              ) : e?.kind === 'volcano' ? (
+                <span className="muted small">Resumen geológico: Smithsonian Global Volcanism Program</span>
+              ) : null}
             </div>
           ) : null}
 
@@ -641,6 +735,9 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
           )}
         </div>
         <div className="pm-actions">
+          {e && Object.keys(e.children).length > 0 && e.kind !== 'country' && (
+            <Link className="btn" to={`/geografia?dentro=${encodeURIComponent(e.id)}${e.cc ? `&pais=${e.cc}` : ''}`} onClick={onClose}>Ver sus lugares</Link>
+          )}
           <a className="btn btn-primary" href={`https://www.google.com/maps/search/?api=1&query=${ll}`} target="_blank" rel="noreferrer">Abrir en Google Maps</a>
           <a className="btn" href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll}`} target="_blank" rel="noreferrer">Street View aquí</a>
           {wiki?.pageUrl && (
