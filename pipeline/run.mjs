@@ -30,6 +30,9 @@ import { demonyms } from './demonyms.mjs'
 import { report } from './report.mjs'
 import { images } from './images.mjs'
 import { upload } from './upload.mjs'
+import { duels } from './duels.mjs'
+import { atlas } from './atlas.mjs'
+import { places, geocode, placesEs, placeInfo, placeFame } from './places.mjs'
 import * as countriesBase from './sources/countries-base.mjs'
 import * as plonkit from './sources/plonkit.mjs'
 import * as geotips from './sources/geotips.mjs'
@@ -151,6 +154,16 @@ const stages = {
       sources: positional.slice(1),
     }),
   upload: () => upload(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  // duelos entre gemelos con DeepSeek (de pago, con caché); luego `export`
+  duels: () => duels(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  // lugares mencionados en las pistas (DeepSeek) y sus coordenadas (Natural Earth + OpenStreetMap)
+  places: () => places(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  'places-es': () => placesEs(db, { model: flag('model') }),
+  'place-fame': () => placeFame(db),
+  'place-info': () => placeInfo(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  geocode: () => geocode(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  // atlas: los lugares más importantes de cada país (Wikidata + Wikipedia, gratis)
+  atlas: () => atlas(db, { only: positional.slice(1).length ? positional.slice(1) : undefined }),
   export: () => exportAll(db),
   report: () => report(db),
   all: async () => {
