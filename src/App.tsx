@@ -1,15 +1,34 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import Countries from './pages/Countries'
 import Maps from './pages/Maps'
 import CountryGuide from './pages/CountryGuide'
-import Identify from './pages/Identify'
-import Compare from './pages/Compare'
+import Search from './pages/Search'
+import Geography from './pages/Geography'
+import Duel from './pages/Duel'
 import Visual from './pages/Visual'
 import Train from './pages/Train'
 import Sources from './pages/Sources'
+
+// las antiguas páginas de tema y del explorador son ahora la propia guía (una sola página)
+function GuideRedirect() {
+  const { code } = useParams()
+  const [params] = useSearchParams()
+  params.delete('tema')
+  params.delete('sub')
+  params.delete('vista')
+  const qs = params.toString()
+  return <Navigate to={`/pais/${code}${qs ? `?${qs}` : ''}`} replace />
+}
+
+// la antigua comparación (?c=us,ca) es ahora el duelo entre los dos primeros países
+function CompareRedirect() {
+  const [params] = useSearchParams()
+  const [a, b] = (params.get('c') ?? '').split(',')
+  return <Navigate to={a && b ? `/duelo?a=${a}&b=${b}` : '/duelo'} replace />
+}
 
 export default function App() {
   return (
@@ -21,8 +40,13 @@ export default function App() {
           <Route path="/paises" element={<Countries />} />
           <Route path="/mapas" element={<Maps />} />
           <Route path="/pais/:code" element={<CountryGuide />} />
-          <Route path="/identificar" element={<Identify />} />
-          <Route path="/comparar" element={<Compare />} />
+          <Route path="/pais/:code/tema/:cat" element={<GuideRedirect />} />
+          <Route path="/pais/:code/explorar" element={<GuideRedirect />} />
+          <Route path="/buscar" element={<Search />} />
+          <Route path="/geografia" element={<Geography />} />
+          <Route path="/identificar" element={<Navigate to="/buscar" replace />} />
+          <Route path="/duelo" element={<Duel />} />
+          <Route path="/comparar" element={<CompareRedirect />} />
           <Route path="/explorar" element={<Visual />} />
           <Route path="/entrenar" element={<Train />} />
           <Route path="/fuentes" element={<Sources />} />

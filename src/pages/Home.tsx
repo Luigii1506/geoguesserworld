@@ -69,9 +69,9 @@ export default function Home() {
             <Link to="/paises">Ir a países</Link>
           </div>
           <div>
-            <h3>Compara lo que se confunde</h3>
-            <p>Pon los gemelos lado a lado. En partida, marca lo que ves y descarta países.</p>
-            <Link to="/comparar">Comparar</Link>
+            <h3>Distingue a los gemelos</h3>
+            <p>Duelos en fotos entre los países que se confunden, con la clave en una frase y un quiz de dos minutos.</p>
+            <Link to="/duelo">Duelos</Link>
           </div>
           <div>
             <h3>Entrena hasta reconocerlo</h3>

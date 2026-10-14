@@ -79,6 +79,8 @@ export interface Hint {
   images: string[]
   /** enlaces a ejemplos que la fuente incluye dentro del texto */
   links?: { text: string; url: string }[]
+  /** lugares que menciona, con coordenadas (para verlos en un mapa) */
+  places?: { n: string; es?: string; lat: number; lng: number; k?: string }[]
 }
 
 export interface Resource {
@@ -109,6 +111,8 @@ export interface MetaObject {
   attrs: Record<string, string>
   features: string[]
   hints: number[]
+  /** foto de ejemplo (primera imagen de sus pistas) */
+  img?: string | null
   alsoIn: string[]
   confusedWith: { country: string; difference: string | null }[]
   sameDesign: { country: string; shared: number; total: number }[]

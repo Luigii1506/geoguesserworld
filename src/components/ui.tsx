@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { Cluster, CountryRow, Hint, MetaObject } from '../lib/data'
-import { countryFlag, countryLabel } from '../lib/data'
+import { countryFlag, countryLabel, useCountryFile, useCountryMap, useJson } from '../lib/data'
 import { hintText, type Lang } from '../lib/i18n'
+import { fetchPlaceWiki, type PlaceWiki } from '../lib/wiki'
 import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, USEFULNESS, VARIANT_LABEL, attrLabel, valueLabel } from '../lib/labels'
 import { imageSrc } from '../lib/images'
 
@@ -147,31 +148,71 @@ function blocks(s: string): Block[] {
   return out.map((b) => (b.kind === 'ul' && b.items.length === 1 ? { kind: 'p', text: b.items[0] } : b))
 }
 
-function Blocks({ list }: { list: Block[] }) {
+type Linker = (text: string) => React.ReactNode
+
+function Blocks({ list, link = (t) => t }: { list: Block[]; link?: Linker }) {
   return (
     <>
       {list.map((b, i) =>
-        b.kind === 'p' ? <p key={i}>{b.text}</p> : <ul key={i}>{b.items.map((t, j) => <li key={j}>{t}</li>)}</ul>,
+        b.kind === 'p' ? <p key={i}>{link(b.text)}</p> : <ul key={i}>{b.items.map((t, j) => <li key={j}>{link(t)}</li>)}</ul>,
       )}
     </>
   )
+}
+
+// palabras genéricas que se quitan para reconocer el nombre propio en cualquier idioma
+// ("Cofre de Perote national park" → "Cofre de Perote", que también está en "parque nacional Cofre de Perote")
+const PLACE_GENERIC = /\b(national park|nature reserve|state park|park|volcano|mount|mountains?|range|river|lake|island|islands|peninsula|desert|town of|village of|city of|town|village|city|state|province|region|county|district|municipality|highway|road)\b/gi
+const placeCore = (n: string) => n.replace(PLACE_GENERIC, ' ').replace(/\s+/g, ' ').trim()
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Convierte en enlace (abre el mapa) cada lugar que aparece en el texto. */
+function placeLinker(places: { n: string; es?: string }[], onPlace: (i: number) => void): Linker | undefined {
+  // se reconoce el nombre original (inglés) y el español: el texto puede estar en cualquiera
+  const forms: [string, number][] = []
+  places.forEach((p, i) => {
+    for (const f of new Set([p.n, placeCore(p.n), ...(p.es ? [p.es, placeCore(p.es)] : [])])) if (f.length >= 3) forms.push([f, i])
+  })
+  if (!forms.length) return undefined
+  forms.sort((a, b) => b[0].length - a[0].length)
+  const index = new Map(forms.map(([f, i]) => [f.toLowerCase(), i]))
+  const re = new RegExp(`(?<![\\p{L}])(${forms.map(([f]) => escapeRe(f)).join('|')})(?![\\p{L}])`, 'giu')
+  return (text) => {
+    // cada lugar se enlaza solo la primera vez que aparece en el párrafo
+    const used = new Set<number>()
+    const out: React.ReactNode[] = []
+    let last = 0
+    for (const m of text.matchAll(re)) {
+      const i = index.get(m[1].toLowerCase())
+      if (i === undefined || used.has(i)) continue
+      used.add(i)
+      out.push(text.slice(last, m.index))
+      out.push(
+        <button key={`${m.index}`} className="place-link" onClick={() => onPlace(i)} title="Ver en el mapa">{m[1]}</button>,
+      )
+      last = m.index + m[1].length
+    }
+    out.push(text.slice(last))
+    return out
+  }
 }
 
 /**
  * Texto de una pista con su estructura: viñetas como lista, sin líneas en
  * blanco ni separadores, y la parte "--- NOTE:" (Learnable Meta) como nota.
  */
-export function HintText({ text }: { text: string }) {
+export function HintText({ text, places, onPlace }: { text: string; places?: { n: string; es?: string }[]; onPlace?: (i: number) => void }) {
+  const link = places?.length && onPlace ? placeLinker(places, onPlace) : undefined
   // "--- NOTE:" (Learnable Meta) o "NOTA:" al inicio de línea (Geometas)
   const [main, ...notes] = text.split(/\s*-{2,}\s*(?:NOTE|NOTA|Note|Nota)\s*:?\s*|\n\s*(?:NOTE|NOTA|Note|Nota)\s*:\s*/)
   const note = blocks(notes.join('\n'))
   return (
     <div className="hint-text">
-      <Blocks list={blocks(main)} />
+      <Blocks list={blocks(main)} link={link} />
       {note.length > 0 && (
         <div className="hint-note">
           <span>Nota</span>
-          <div><Blocks list={note} /></div>
+          <div><Blocks list={note} link={link} /></div>
         </div>
       )}
     </div>
@@ -226,13 +267,26 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
   const members = cluster.members.map((id) => hints.get(id)).filter((h): h is Hint => Boolean(h))
   const images = cluster.images ?? [...new Set(members.flatMap((m) => m.images))]
   const links = [...new Map(members.flatMap((m) => m.links ?? []).map((l) => [l.url, l])).values()]
+  const places = [...new Map(members.flatMap((m) => m.places ?? []).map((p) => [p.n.toLowerCase(), p])).values()]
+  const [mapAt, setMapAt] = useState<number | null>(null)
   const text = hintText(canonical, lang)
   const sources = cluster.sources.map((s) => SOURCE_NAMES[s] ?? s)
 
   return (
     <article className="hint">
-      {text && <HintText text={text} />}
+      {text && <HintText text={text} places={places} onPlace={setMapAt} />}
       {images.length > 0 && <Gallery images={images} limit={6} strip />}
+      {places.length > 0 && (
+        <div className="hint-places">
+          <span className="muted">En el mapa:</span>
+          {places.slice(0, 8).map((p, j) => (
+            <button key={p.n} className="place-chip" onClick={() => setMapAt(j)}>
+              <span className="place-pin" aria-hidden="true" />{lang === 'es' ? p.es ?? p.n : p.n}
+            </button>
+          ))}
+        </div>
+      )}
+      {mapAt !== null && <PlaceMap places={places} index={mapAt} onClose={() => setMapAt(null)} hints={hints} lang={lang} />}
       {links.length > 0 && (
         <div className="hint-examples">
           <span className="muted">Ejemplos:</span>
@@ -387,5 +441,215 @@ export function ObjectProfile({ obj, map, traitCount }: {
         </div>
       )}
     </div>
+  )
+}
+
+export type Place = { id?: string; n: string; es?: string; lat: number; lng: number; k?: string; cc?: string }
+type PlaceDetail = { title: string; x: string; img: string | null; url: string | null; lang: string }
+// zoom del mapa según el tipo de lugar: una ciudad de cerca, un estado entero
+const PLACE_ZOOM: Record<string, number> = {
+  city: 11, town: 13, village: 14, neighbourhood: 14, area: 10, road: 9, natural: 9, island: 9, peninsula: 8, coast: 9, beach: 14,
+  region: 6, volcano: 11, mountain: 11, range: 7, river: 8, lake: 10, waterfall: 14, desert: 7, forest: 9, national_park: 10,
+  monument: 16, temple: 16, church: 16, mosque: 16, castle: 16, palace: 16, bridge: 15, archaeological: 15, landmark: 15,
+}
+export const PLACE_KIND: Record<string, string> = {
+  city: 'Ciudad', town: 'Pueblo', village: 'Aldea', neighbourhood: 'Barrio', area: 'Zona', road: 'Carretera', natural: 'Lugar natural',
+  island: 'Isla', peninsula: 'Península', coast: 'Costa', beach: 'Playa', region: 'Región', volcano: 'Volcán', mountain: 'Montaña',
+  range: 'Cordillera', river: 'Río', lake: 'Lago', waterfall: 'Cascada', desert: 'Desierto', forest: 'Bosque', national_park: 'Parque nacional',
+  monument: 'Monumento', temple: 'Templo', church: 'Iglesia', mosque: 'Mezquita', castle: 'Castillo', palace: 'Palacio', bridge: 'Puente',
+  archaeological: 'Sitio arqueológico', landmark: 'Lugar emblemático', other: 'Lugar',
+}
+
+/**
+ * Lo que una pista dice de un lugar: el párrafo que lo nombra (si el nombre es solo
+ * un título, el párrafo siguiente), sin listas de nombres sueltos, en una o dos frases.
+ */
+function placeSnippet(text: string, name: string, max = 230): string | null {
+  const core = placeCore(name).toLowerCase()
+  const forms = [...new Set([name.toLowerCase(), core])].filter((f) => f.length >= 3)
+  const lines = text.split(/\n+/).map((l) => l.replace(/^[\s•▪●◦·*–-]+/, '').trim()).filter((l) => l && !/^-{2,}/.test(l))
+  const has = (l: string) => forms.some((f) => l.toLowerCase().includes(f))
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]
+    if (!has(l)) continue
+    // título o elemento de lista (solo el nombre): se toma lo que viene después
+    if (l.length < name.length + 25) {
+      const next = lines.slice(i + 1).find((x) => x.length > 40)
+      if (next && lines.slice(i + 1, i + 3).includes(next)) return clipSentences(next, max)
+      continue
+    }
+    return clipSentences(l, max)
+  }
+  return null
+}
+function clipSentences(t: string, max: number) {
+  const parts = t.match(/[^.!?]+[.!?]+(\s|$)/g) ?? [t]
+  let out = ''
+  for (const p of parts) {
+    if ((out + p).length > max && out) break
+    out += p
+  }
+  out = out.trim() || t
+  return out.length > max ? out.slice(0, max - 1).trimEnd() + '…' : out
+}
+
+/**
+ * Ficha de un lugar mencionado en una pista: qué es (Wikipedia, con foto), qué
+ * dicen nuestras pistas de ese lugar, su mapa y enlaces a Google Maps / Street View.
+ */
+export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
+  places: Place[]
+  index?: number
+  onClose: () => void
+  hints?: Map<number, Hint>
+  lang?: Lang
+}) {
+  const [i, setI] = useState(index)
+  const [wide, setWide] = useState(false)
+  const [fetched, setFetched] = useState<PlaceWiki | null | undefined>(undefined)
+  const [photo, setPhoto] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+  const p = places[i]
+  const label = (x: Place) => (lang === 'es' ? x.es ?? x.n : x.n)
+  // ficha guardada en la base de lugares (Wikipedia elegida por el pipeline); si no hay, se busca al momento
+  const stored = useJson<Record<string, PlaceDetail>>(p.cc ? `/community/places/${p.cc}.json` : null)
+  const saved = p.id && stored ? stored[p.id] : undefined
+  const ownHints = useCountryFile(hints ? undefined : p.cc)
+  const hintPool = hints ?? (ownHints ? new Map(ownHints.hints.map((h) => [h.id, h])) : undefined)
+  const countries = useCountryMap()
+  const country = p.cc ? countries.get(p.cc) : undefined
+  useEffect(() => {
+    if (stored === undefined && p.cc) return // aún cargando la base
+    if (saved) return
+    let alive = true
+    setFetched(undefined)
+    fetchPlaceWiki(p.es ?? p.n, p.lat, p.lng).then((w) => alive && setFetched(w))
+    return () => {
+      alive = false
+    }
+  }, [p.n, p.lat, p.lng, stored, saved]) // eslint-disable-line react-hooks/exhaustive-deps
+  const wiki: PlaceWiki | null | undefined = saved
+    ? { title: saved.title, description: (p as Place & { d?: string }).d ?? null, extract: saved.x, image: saved.img, pageUrl: saved.url ?? '', lang: saved.lang === 'en' ? 'en' : 'es' }
+    : fetched
+
+  // pistas del país que mencionan este mismo lugar
+  const key = p.n.toLowerCase()
+  const seenText = new Set<string>()
+  const related = [...(hintPool?.values() ?? [])]
+    .filter((h) => h.places?.some((x) => x.n.toLowerCase() === key))
+    .map((h) => ({ h, text: placeSnippet(hintText(h, lang), p.es ?? p.n) ?? placeSnippet(hintText(h, lang), p.n) ?? placeSnippet(h.text ?? '', p.n) }))
+    .filter((x): x is { h: Hint; text: string } => Boolean(x.text))
+    .filter(({ text }) => {
+      // la misma pista copiada por varias fuentes: una sola vez
+      const sig = text.toLowerCase().replace(/[^a-záéíóúñü]+/g, '').slice(0, 60)
+      if (seenText.has(sig)) return false
+      seenText.add(sig)
+      return true
+    })
+    .slice(0, 6)
+  const zoom = wide ? 5 : PLACE_ZOOM[p.k ?? ''] ?? 9
+  const ll = `${p.lat},${p.lng}`
+  const kind = PLACE_KIND[p.k ?? ''] ?? 'Lugar'
+
+  return createPortal(
+    <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="pm-box" onClick={(e) => e.stopPropagation()}>
+        <div className="pm-head">
+          <div>
+            <span className="eyebrow">{kind}</span>
+            <strong>{label(p)}</strong>
+            {(wiki?.description ?? (p as Place & { d?: string }).d) && <span className="pm-desc">{wiki?.description ?? (p as Place & { d?: string }).d}</span>}
+            {(p as Place & { unesco?: boolean }).unesco && (
+              <span className="pm-facts"><em>Patrimonio de la Humanidad</em></span>
+            )}
+            {country &&
+              (country.groups > 0 ? (
+                <Link to={`/pais/${country.code}`} className="pm-country" onClick={onClose}>
+                  {country.flag} {country.name_es ?? country.name} · ver la guía
+                </Link>
+              ) : (
+                <span className="pm-country pm-country-plain">{country.flag} {country.name_es ?? country.name}</span>
+              ))}
+          </div>
+          <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        {places.length > 1 && (
+          <div className="pm-places">
+            {places.map((x, j) => (
+              <button key={x.n + j} className={j === i ? 'on' : ''} onClick={() => { setI(j); setWide(false) }}>{label(x)}</button>
+            ))}
+          </div>
+        )}
+        <div className="pm-body">
+          <div className="pm-top">
+            {wiki?.image && (
+              <button className="pm-photo" onClick={() => setPhoto(wiki.image)} aria-label="Ampliar foto">
+                <img src={wiki.image} alt={wiki.title} />
+              </button>
+            )}
+            <div className="pm-mapwrap">
+              <iframe key={`${ll}-${zoom}`} className="pm-map" title={`Mapa de ${p.n}`} loading="lazy" src={`https://maps.google.com/maps?q=${ll}&z=${zoom}&output=embed`} />
+              <div className="seg seg-sm pm-zoom">
+                <button className={!wide ? 'on' : ''} onClick={() => setWide(false)}>De cerca</button>
+                <button className={wide ? 'on' : ''} onClick={() => setWide(true)}>En el país</button>
+              </div>
+            </div>
+          </div>
+
+          {((p as Place & { metrics?: [string, string][] }).metrics ?? []).length > 0 && (
+            <dl className="pm-metrics">
+              {(p as Place & { metrics?: [string, string][] }).metrics!.map(([k, v]) => (
+                <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+              ))}
+            </dl>
+          )}
+          {wiki === undefined ? (
+            <p className="muted small">Buscando información del lugar…</p>
+          ) : wiki ? (
+            <div className="pm-wiki">
+              <p>{clipSentences(wiki.extract, 620)}</p>
+              <a href={wiki.pageUrl} target="_blank" rel="noreferrer" className="muted small">Wikipedia{wiki.lang === 'en' ? ' (en inglés)' : ''} · CC BY-SA</a>
+            </div>
+          ) : null}
+
+          {related.length > 0 && (
+            <div className="pm-related">
+              <span className="eyebrow">Lo que dicen las pistas de {label(p)}</span>
+              {related.map(({ h, text }) => (
+                <div key={h.id} className="pm-hint">
+                  {h.images[0] && (
+                    <button className="pm-hint-img" onClick={() => setPhoto(h.images[0])} aria-label="Ampliar">
+                      <img src={imageSrc(h.images[0], 'thumb')} alt="" loading="lazy" />
+                    </button>
+                  )}
+                  <div>
+                    <p>{text}</p>
+                    {h.url && <a className="pm-hint-src" href={h.url} target="_blank" rel="noreferrer">{SOURCE_NAMES[h.source_id] ?? h.source_id} →</a>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="pm-actions">
+          <a className="btn btn-primary" href={`https://www.google.com/maps/search/?api=1&query=${ll}`} target="_blank" rel="noreferrer">Abrir en Google Maps</a>
+          <a className="btn" href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll}`} target="_blank" rel="noreferrer">Street View aquí</a>
+          {wiki?.pageUrl && (
+            <a className="btn" href={wiki.pageUrl} target="_blank" rel="noreferrer">Leer en Wikipedia{wiki.lang === 'en' ? ' (inglés)' : ''}</a>
+          )}
+        </div>
+      </div>
+      {photo && <Lightbox images={[photo]} index={0} onClose={() => setPhoto(null)} />}
+    </div>,
+    document.body,
   )
 }

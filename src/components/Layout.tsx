@@ -4,13 +4,13 @@ import { useProgress } from '../lib/storage'
 import { isDue } from '../lib/sm2'
 import { setLang, useLang } from '../lib/i18n'
 
-// Navegación en el orden del plan: estudiar → identificar/comparar → entrenar.
+// Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
 const NAV = [
   { to: '/paises', label: 'Países' },
   { to: '/mapas', label: 'Mapas' },
-  { to: '/identificar', label: 'Identificar' },
-  { to: '/comparar', label: 'Comparar' },
-  { to: '/explorar', label: 'Fotos' },
+  { to: '/geografia', label: 'Geografía' },
+  { to: '/buscar', label: 'Buscar' },
+  { to: '/duelo', label: 'Duelos' },
   { to: '/entrenar', label: 'Entrenar' },
 ]
 
@@ -51,7 +51,12 @@ export default function Layout() {
           <Link to="/" className="brand">GeoMastery</Link>
           <nav className="nav">
             {NAV.map((item) => (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'active' : '')}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                // la guía de un país (/pais/xx) también es parte de "Países"
+                className={({ isActive }) => (isActive || (item.to === '/paises' && location.pathname.startsWith('/pais/')) ? 'active' : '')}
+              >
                 {item.label}
                 {item.to === '/entrenar' && due > 0 && <span className="count">{due}</span>}
               </NavLink>
