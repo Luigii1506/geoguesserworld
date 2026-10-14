@@ -1,0 +1,209 @@
+{
+  "families": [
+    {
+      "id": "ciudades",
+      "label": "Ciudades y pueblos",
+      "kinds": [
+        "city",
+        "town",
+        "urban"
+      ],
+      "sort": "population"
+    },
+    {
+      "id": "montanas",
+      "label": "Volcanes y montañas",
+      "kinds": [
+        "volcano",
+        "mountain",
+        "range"
+      ],
+      "sort": "elevation"
+    },
+    {
+      "id": "agua",
+      "label": "Mares, ríos y lagos",
+      "kinds": [
+        "sea",
+        "gulf",
+        "strait",
+        "ocean",
+        "river",
+        "lake",
+        "waterfall",
+        "coast",
+        "delta",
+        "wetland"
+      ],
+      "sort": "length"
+    },
+    {
+      "id": "relieve",
+      "label": "Llanuras, mesetas y desiertos",
+      "kinds": [
+        "plain",
+        "plateau",
+        "desert",
+        "basin",
+        "valley"
+      ],
+      "sort": "area"
+    },
+    {
+      "id": "islas",
+      "label": "Islas y penínsulas",
+      "kinds": [
+        "island",
+        "peninsula"
+      ],
+      "sort": "area"
+    },
+    {
+      "id": "naturaleza",
+      "label": "Parques y naturaleza",
+      "kinds": [
+        "national_park",
+        "forest",
+        "natural",
+        "ecoregion"
+      ]
+    },
+    {
+      "id": "monumentos",
+      "label": "Monumentos",
+      "kinds": [
+        "landmark",
+        "monument",
+        "bridge",
+        "palace",
+        "castle"
+      ]
+    },
+    {
+      "id": "templos",
+      "label": "Templos e iglesias",
+      "kinds": [
+        "temple",
+        "church",
+        "mosque"
+      ]
+    },
+    {
+      "id": "arqueologia",
+      "label": "Arqueología",
+      "kinds": [
+        "archaeological"
+      ]
+    },
+    {
+      "id": "regiones",
+      "label": "Estados y regiones",
+      "kinds": [
+        "admin1",
+        "region"
+      ],
+      "sort": "population"
+    }
+  ],
+  "kinds": {
+    "country": "País",
+    "admin1": "Estado o región",
+    "region": "Región",
+    "urban": "Área urbana",
+    "city": "Ciudad",
+    "town": "Pueblo",
+    "volcano": "Volcán",
+    "mountain": "Montaña",
+    "range": "Cordillera",
+    "plain": "Llanura",
+    "plateau": "Meseta",
+    "desert": "Desierto",
+    "basin": "Cuenca",
+    "valley": "Valle",
+    "river": "Río",
+    "lake": "Lago",
+    "waterfall": "Cascada",
+    "coast": "Costa",
+    "delta": "Delta",
+    "wetland": "Humedal",
+    "island": "Isla",
+    "peninsula": "Península",
+    "national_park": "Parque nacional",
+    "forest": "Bosque",
+    "natural": "Paraje natural",
+    "landmark": "Lugar emblemático",
+    "monument": "Monumento",
+    "bridge": "Puente",
+    "palace": "Palacio",
+    "castle": "Castillo",
+    "temple": "Templo",
+    "church": "Iglesia",
+    "mosque": "Mezquita",
+    "archaeological": "Sitio arqueológico",
+    "other": "Lugar",
+    "ecoregion": "Ecorregión",
+    "ocean": "Océano",
+    "sea": "Mar",
+    "gulf": "Golfo o bahía",
+    "strait": "Estrecho"
+  },
+  "aliases": {
+    "village": "town",
+    "neighbourhood": "town",
+    "beach": "coast",
+    "road": "other",
+    "area": "region",
+    "heritage": "landmark"
+  },
+  "populationScope": {
+    "_": "ámbito de población que representa a cada tipo (ciudad ≠ área urbana ≠ región); el resto usa 'city'",
+    "city": "city",
+    "town": "city",
+    "urban": "urban",
+    "admin1": "admin",
+    "country": "admin",
+    "region": "admin"
+  },
+  "plural": {
+    "country": "países",
+    "admin1": "estados o regiones",
+    "region": "regiones",
+    "urban": "áreas urbanas",
+    "city": "ciudades",
+    "town": "pueblos",
+    "volcano": "volcanes",
+    "mountain": "montañas",
+    "range": "cordilleras",
+    "plain": "llanuras",
+    "plateau": "mesetas",
+    "desert": "desiertos",
+    "basin": "cuencas",
+    "valley": "valles",
+    "river": "ríos",
+    "lake": "lagos",
+    "waterfall": "cascadas",
+    "coast": "costas",
+    "delta": "deltas",
+    "wetland": "humedales",
+    "island": "islas",
+    "peninsula": "penínsulas",
+    "national_park": "parques nacionales",
+    "forest": "bosques",
+    "natural": "parajes naturales",
+    "landmark": "lugares emblemáticos",
+    "monument": "monumentos",
+    "bridge": "puentes",
+    "palace": "palacios",
+    "castle": "castillos",
+    "temple": "templos",
+    "church": "iglesias",
+    "mosque": "mezquitas",
+    "archaeological": "sitios arqueológicos",
+    "ecoregion": "ecorregiones",
+    "sea": "mares",
+    "gulf": "golfos y bahías",
+    "strait": "estrechos",
+    "ocean": "océanos",
+    "other": "lugares"
+  }
+}

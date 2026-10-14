@@ -190,6 +190,22 @@ atributos de GeoHints (líneas, cámaras, años, nieve) y los objetos de meta.
 Las imágenes de lugares (preguntas de Entrenar) vienen de la API de Wikipedia (CC BY-SA,
 atribuidas en la propia tarjeta).
 
+### Base geográfica y mapas de terreno
+
+Geografía (volcanes, ríos, ciudades, cordilleras, llanuras…) y el mapa de terreno de
+cada país (relieve, llanuras y montañas, vegetación, cultivos y clima) salen de
+`data/geo.db`, con el mismo esquema que la base D1 de producción. Contrato completo
+(modelo, fuentes, capas, API, publicación) en [docs/geo.md](docs/geo.md).
+
+```bash
+brew install gdal                                  # una vez
+npm run pipeline -- geo build                      # data/geo.db (~5 min)
+npm run pipeline -- geo download wikidata-enrich   # fama, fotos y artículos (caché)
+npm run pipeline -- geo layers                     # repartos e imágenes por país (largo)
+npm run pipeline -- export                         # las pistas enlazan sus lugares
+npm run pipeline -- geo publish                    # D1 + R2 (luego: cd worker && npx wrangler deploy)
+```
+
 ## Repetición espaciada
 
 `src/lib/sm2.ts` implementa SM-2 (SuperMemo-2) documentado línea a línea: intervalos

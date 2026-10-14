@@ -32,6 +32,9 @@ import { images } from './images.mjs'
 import { upload } from './upload.mjs'
 import { duels } from './duels.mjs'
 import { atlas } from './atlas.mjs'
+import { streetview } from './streetview.mjs'
+import { volcanoes } from './volcanoes.mjs'
+import { geo } from './geo/index.mjs'
 import { places, geocode, placesEs, placeInfo, placeFame } from './places.mjs'
 import * as countriesBase from './sources/countries-base.mjs'
 import * as plonkit from './sources/plonkit.mjs'
@@ -164,6 +167,12 @@ const stages = {
   geocode: () => geocode(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   // atlas: los lugares más importantes de cada país (Wikidata + Wikipedia, gratis)
   atlas: () => atlas(db, { only: positional.slice(1).length ? positional.slice(1) : undefined }),
+  // Street View de cada ejemplo (resuelve los enlaces de Google Maps de las pistas)
+  // volcanes del Smithsonian (tipo, última erupción, entorno…) enlazados con el atlas
+  volcanes: () => volcanoes(db),
+  streetview: () => streetview(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  // base geográfica (data/geo.db, D1) y capas de terreno: ver docs/geo.md
+  geo: () => geo(db, args.slice(args.indexOf('geo') + 1), { refresh }),
   export: () => exportAll(db),
   report: () => report(db),
   all: async () => {

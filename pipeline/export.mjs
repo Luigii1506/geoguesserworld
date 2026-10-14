@@ -4,9 +4,11 @@
 //   public/community/country/<cc>.json  → todas las pistas y atributos de un país
 // Todo bajo public/community/ (fuera de git, uso personal).
 
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
+import { GEO_DB } from './geo/store.mjs'
+import { placeKeyId } from './geo/sources/hints.mjs'
 import { ROOT } from './lib/paths.mjs'
 import { ensureImageTable, imagePath } from './images.mjs'
 import { buildMaps } from './maps.mjs'
@@ -61,163 +63,19 @@ function inferRegions(clusters, byId, countryNames, extra = []) {
 // parejas que las fuentes "relacionan" por un nombre ambiguo (el estado de Georgia en EE. UU.)
 const NOT_TWINS = new Set(['us|ge'])
 
-const placeId = (key) => createHash('sha1').update(key).digest('hex').slice(0, 10)
-// consultas unidas a un mismo lugar (las pistas apuntan al id del lugar unido)
-let placeAlias = new Map()
-
 /**
- * Lugares con ficha de Wikipedia o coordenadas: places-index.json (para la galería:
- * nombre, tipo, país, coordenadas, miniatura y en cuántas pistas sale) y
- * places/<cc>.json (resumen, foto grande y enlace, para la ficha).
+ * Entidad de la base geográfica (data/geo.db) de cada mención de lugar en las
+ * pistas: el xref `hp` que escribe `geo build` (pipeline/geo/sources/hints.mjs).
  */
-function exportPlaces(db, OUT) {
-  const hasInfo = db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'place_info'").get().n > 0
-  const hasEs = db.prepare('PRAGMA table_info(hint_places)').all().some((c) => c.name === 'name_es')
-  if (!hasInfo) return 0
-  const hasType = db.prepare('PRAGMA table_info(place_info)').all().some((c) => c.name === 'type')
-  const rows = db
-    .prepare(
-      `SELECT k.key, k.cc, MIN(hp.name) name, MIN(${hasEs ? 'hp.name_es' : 'NULL'}) name_es, MIN(hp.kind) kind, COUNT(DISTINCT hp.hint_id) hints,
-          i.title, i.description, i.extract, i.image, i.thumb, i.url, i.lang, ${hasType ? 'i.type' : 'NULL'} AS type,
-          ${db.prepare('PRAGMA table_info(place_info)').all().some((c) => c.name === 'sitelinks') ? 'i.sitelinks' : 'NULL'} AS sitelinks,
-          COALESCE(p.lat, i.lat) lat, COALESCE(p.lng, i.lng) lng
-       FROM (SELECT DISTINCT lower(COALESCE(cc, '')) || '|' || lower(trim(query)) key, cc FROM hint_places) k
-       JOIN hint_places hp ON lower(COALESCE(hp.cc, '')) || '|' || lower(trim(hp.query)) = k.key
-       LEFT JOIN place_info i ON i.key = k.key AND i.status = 'ok'
-       LEFT JOIN places p ON p.key = k.key AND p.status = 'ok'
-       GROUP BY k.key`,
-    )
-    .all()
-    .filter((r) => r.lat != null && r.cc)
-  // el mismo lugar extraído con consultas distintas ("Valdés Peninsula, Chubut" / "Península Valdés"):
-  // se une por artículo de Wikipedia o, sin artículo, por nombre dentro del país
-  const merged = new Map()
-  const fold = (t) => (t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
-  for (const r of rows) {
-    const k = r.title ? `${r.cc}|w|${r.lang}|${r.title}` : `${r.cc}|n|${fold(r.name_es ?? r.name)}`
-    const prev = merged.get(k)
-    if (!prev) merged.set(k, { ...r, keys: [r.key] })
-    else {
-      prev.hints += r.hints
-      prev.keys.push(r.key)
-    }
+function placeEntities() {
+  if (!existsSync(GEO_DB)) {
+    console.warn('[export] ⚠ falta data/geo.db (npm run pipeline -- geo build): las pistas saldrán sin enlace a sus lugares')
+    return new Map()
   }
-  // un lugar sin artículo que se llama igual que otro del país con artículo es el mismo
-  // (el del mismo tipo si lo hay): se une a ese
-  const titled = new Map()
-  for (const [k, r] of merged) if (r.title) {
-    const nk = `${r.cc}|${fold(r.name_es ?? r.name)}`
-    if (!titled.has(nk)) titled.set(nk, [])
-    titled.get(nk).push(r)
-  }
-  for (const [k, r] of [...merged]) {
-    if (r.title) continue
-    const cands = titled.get(`${r.cc}|${fold(r.name_es ?? r.name)}`)
-    if (!cands?.length) continue
-    const target = cands.find((x) => (x.type ?? x.kind) === (r.type ?? r.kind)) ?? cands[0]
-    target.hints += r.hints
-    target.keys.push(...r.keys)
-    merged.delete(k)
-  }
-  // mismo nombre y mismo tipo en el país (ciudad y cantón de Guayaquil): uno solo, el de más pistas
-  const byNameType = new Map()
-  for (const [k, r] of [...merged]) {
-    const nk = `${r.cc}|${fold(r.name_es ?? r.name)}|${r.type ?? r.kind}`
-    const prev = byNameType.get(nk)
-    if (!prev) byNameType.set(nk, [k, r])
-    else {
-      const [keep, drop, dropKey] = prev[1].hints >= r.hints ? [prev[1], r, k] : [r, prev[1], prev[0]]
-      keep.hints += drop.hints
-      keep.keys.push(...drop.keys)
-      merged.delete(dropKey)
-      byNameType.set(nk, [keep === r ? k : prev[0], keep])
-    }
-  }
-  // atlas (Wikidata): los lugares más importantes de cada país. Si un lugar de las pistas
-  // es el mismo artículo de Wikipedia, se funden (conserva sus pistas y gana los datos)
-  const hasAtlas = db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'atlas'").get().n > 0
-  if (hasAtlas) {
-    const byTitle = new Map()
-    for (const r of merged.values()) if (r.title) byTitle.set(`${r.cc}|${r.lang}|${r.title}`, r)
-    const wikiUrl = (lang, t) => `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(t.replace(/ /g, '_'))}`
-    for (const a of db.prepare('SELECT * FROM atlas').all()) {
-      // lugares que ya no existen (Tenochtitlan…) fuera; montañas que son volcanes, como volcán
-      if (a.dissolved) continue
-      if (a.volcanic && a.type === 'mountain') a.type = 'volcano'
-      const facts = {
-        ele: a.elevation ?? undefined, pop: a.population ?? undefined, len: a.length_km ?? undefined, unesco: a.unesco ? 1 : undefined,
-        area: a.area_km2 ?? undefined, q: a.discharge ?? undefined, basin: a.basin_km2 ?? undefined, prom: a.prominence ?? undefined,
-        depth: a.depth ?? undefined, vis: a.visitors ?? undefined, nc: a.countries && a.countries > 1 ? a.countries : undefined,
-      }
-      const lang = a.extract_lang ?? (a.es_title ? 'es' : 'en')
-      const title = lang === 'es' ? a.es_title : a.en_title
-      const hit = (a.es_title && byTitle.get(`${a.cc}|es|${a.es_title}`)) || (a.en_title && byTitle.get(`${a.cc}|en|${a.en_title}`))
-      if (hit) {
-        if (a.ccs) hit.ccs = [...new Set([hit.cc, ...a.ccs.split(',')])]
-        Object.assign(hit, {
-          type: a.type === 'heritage' ? hit.type ?? 'landmark' : a.type, facts, sitelinks: a.sitelinks, qid: a.qid,
-          image: hit.image ?? a.image, thumb: hit.thumb ?? (a.image ? `${a.image}?width=480` : null),
-          description: hit.description ?? a.description, name_es: a.name_es ?? hit.name_es,
-        })
-        continue
-      }
-      merged.set(`atlas|${a.qid}`, {
-        key: `atlas|${a.qid}`, keys: [`atlas|${a.qid}`], cc: a.cc, name: a.name_en ?? a.name_es, name_es: a.name_es ?? a.name_en,
-        type: a.type === 'heritage' ? 'landmark' : a.type, hints: 0, lat: a.lat, lng: a.lng, description: a.description,
-        title: title ?? null, extract: a.extract, image: a.image, thumb: a.image ? `${a.image}?width=480` : null,
-        url: title ? wikiUrl(lang, title) : null, lang, facts, sitelinks: a.sitelinks, qid: a.qid,
-        ccs: a.ccs ? [...new Set([a.cc, ...a.ccs.split(',')])] : undefined,
-      })
-    }
-  }
-
-  // un mismo lugar en varios países (lago de Constanza, Danubio…): una sola ficha con todos sus países
-  const global = new Map()
-  for (const [k, r] of [...merged]) {
-    if (!r.title) continue
-    const gk = `${r.lang}|${r.title}`
-    const prev = global.get(gk)
-    if (!prev) {
-      global.set(gk, r)
-      r.ccs ??= [r.cc]
-      continue
-    }
-    if (!prev.ccs.includes(r.cc)) prev.ccs.push(r.cc)
-    prev.hints += r.hints
-    prev.keys.push(...r.keys)
-    prev.sitelinks = Math.max(prev.sitelinks ?? 0, r.sitelinks ?? 0) || prev.sitelinks
-    prev.facts ??= r.facts
-    merged.delete(k)
-  }
-
-  const index = []
-  const byCc = new Map()
-  const aliasOf = new Map() // id de cada consulta → id del lugar unido
-  for (const r of merged.values()) {
-    if (!(r.name_es ?? r.name)) continue
-    const id = placeId(r.keys.sort()[0])
-    for (const k of r.keys) aliasOf.set(placeId(k), id)
-    const f = r.facts && Object.values(r.facts).some((v) => v !== undefined) ? r.facts : undefined
-    index.push({
-      id, n: r.name_es ?? r.name, en: r.name, t: r.type ?? r.kind ?? 'other', cc: r.cc,
-      lat: Math.round(r.lat * 1e4) / 1e4, lng: Math.round(r.lng * 1e4) / 1e4,
-      th: r.thumb ?? undefined, d: r.description ?? undefined, h: r.hints, s: r.sitelinks ?? undefined, f,
-      cs: r.ccs && r.ccs.length > 1 ? r.ccs : undefined,
-    })
-    if (r.title || r.extract) {
-      // la ficha se guarda en el archivo de cada uno de sus países
-      for (const cc of r.ccs ?? [r.cc]) {
-        if (!byCc.has(cc)) byCc.set(cc, {})
-        byCc.get(cc)[id] = { title: r.title, x: r.extract, img: r.image, url: r.url, lang: r.lang }
-      }
-    }
-  }
-  mkdirSync(path.join(OUT, 'places'), { recursive: true })
-  for (const [cc, m] of byCc) writeFileSync(path.join(OUT, 'places', `${cc}.json`), JSON.stringify(m))
-  writeFileSync(path.join(OUT, 'places-index.json'), JSON.stringify(index))
-  placeAlias = aliasOf
-  console.log(`[export] ${index.length} lugares (${index.filter((x) => x.th).length} con foto)`)
-  return index.length
+  const geo = new DatabaseSync(GEO_DB, { readOnly: true })
+  const map = new Map(geo.prepare("SELECT value, entity_id FROM entity_xref WHERE scheme = 'hp'").all().map((r) => [r.value, r.entity_id]))
+  geo.close()
+  return map
 }
 
 const clamp = (s, n) => (s && s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s ?? '')
@@ -359,8 +217,15 @@ export function exportAll(db) {
   const placeStmt = db.prepare(`SELECT hp.name, ${hasEs ? 'hp.name_es' : 'NULL'} AS name_es, hp.kind, p.lat, p.lng, p.key FROM hint_places hp
     JOIN places p ON p.key = lower(COALESCE(hp.cc, '')) || '|' || lower(trim(hp.query))
     WHERE hp.hint_id = ? AND p.status = 'ok' ORDER BY hp.rowid`)
-  // ── base de lugares (Geografía): índice ligero + detalle por país (antes de las fichas: fija los ids) ──
-  exportPlaces(db, OUT)
+  // cada mención apunta a su entidad de la base geográfica (la ficha la sirve /api/geo)
+  const entityOf = placeEntities()
+  // índice de lugares antiguo (ahora es la API de geografía)
+  rmSync(path.join(OUT, 'places-index.json'), { force: true })
+  rmSync(path.join(OUT, 'places'), { recursive: true, force: true })
+  // vista de Street View de cada ejemplo (etapa streetview)
+  const svStmt = db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'hint_sv'").get().n
+    ? db.prepare("SELECT pano, lat, lng, heading, pitch, fov FROM hint_sv WHERE url = ? AND status = 'ok'")
+    : null
   const admin1 = admin1Names()
   const countryNames = countries.flatMap((x) => [x.name, x.name_es].filter(Boolean))
   const dependents = countries.filter((x) => !x.independent).flatMap((x) => [x.name, x.name_es].filter(Boolean))
@@ -368,12 +233,15 @@ export function exportAll(db) {
   for (const c of countries) {
     const hints = hintStmt.all(c.code).map((h) => {
       const links = h.links ? JSON.parse(h.links) : []
-      const places = placeStmt ? placeStmt.all(h.id).map((p) => ({ id: placeAlias.get(placeId(p.key)) ?? placeId(p.key), n: p.name, es: p.name_es && p.name_es !== p.name ? p.name_es : undefined, lat: p.lat, lng: p.lng, k: p.kind ?? undefined, cc: c.code })) : []
+      const v = h.location_url && svStmt ? svStmt.get(h.location_url) : null
+      const sv = v ? { p: v.pano, lat: v.lat, lng: v.lng, h: Math.round(v.heading ?? 0), t: Math.round(v.pitch ?? 0), f: Math.round(v.fov ?? 80) } : undefined
+      const places = placeStmt ? placeStmt.all(h.id).map((p) => ({ id: entityOf.get(placeKeyId(p.key)), n: p.name, es: p.name_es && p.name_es !== p.name ? p.name_es : undefined, lat: p.lat, lng: p.lng, k: p.kind ?? undefined, cc: c.code })) : []
       return withTranslations({
         ...h,
         links: links.length ? links : undefined,
         images: imgStmt.all(h.id).map((i) => servable(i.url)),
         places: places.length ? places : undefined,
+        sv,
       })
     })
     const attributes = attrStmt.all(c.code).map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : undefined }))
