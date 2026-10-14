@@ -9,7 +9,7 @@ dist
 
 # Contenido importado de otras fuentes: SOLO USO PERSONAL, nunca al repo
 public/community/
-data/
+/data/
 
 # Wrangler (Worker de imágenes)
 .wrangler/
