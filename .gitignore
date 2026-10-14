@@ -1,0 +1,15 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# Claves de API
+.env
+.env.*
+
+# Contenido importado de otras fuentes: SOLO USO PERSONAL, nunca al repo
+public/community/
+data/
+
+# Wrangler (Worker de imágenes)
+.wrangler/
