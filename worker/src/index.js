@@ -1,14 +1,21 @@
-// Worker de imágenes de GeoMastery: sirve el bucket R2 privado "geoguesser"
-// solo a quien tenga la clave (uso personal, sin acceso público).
+// Worker de GeoMastery: fotos y capas desde el bucket R2 privado "geoguesser"
+// y la API de geografía sobre D1. Solo para quien tenga la clave (uso personal).
 //
 //   GET /img/ab/<sha1>.webp?k=<clave>     imagen grande (1600 px)
 //   GET /thumb/ab/<sha1>.webp?k=<clave>   miniatura (480 px)
+//   GET /atlas/<ruta>?k=<clave>           capas de terreno y vectores por país (R2 atlas/…)
+//   GET /api/geo/…?k=<clave>              API de geografía (worker/src/geo/api.js, D1)
 //
-// La clave va en ?k= porque una etiqueta <img> no puede enviar cabeceras.
-// También se acepta la cabecera "x-access-key". La clave es el secreto
-// ACCESS_KEY del Worker: wrangler secret put ACCESS_KEY
+// La clave va en ?k= porque una etiqueta <img> no puede enviar cabeceras (y así
+// las llamadas a la API no necesitan preflight CORS). También se acepta la
+// cabecera "x-access-key". La clave es el secreto ACCESS_KEY del Worker:
+// wrangler secret put ACCESS_KEY
 
-const PATH = /^\/(img|thumb)\/[0-9a-f]{2}\/[0-9a-f]{40}\.webp$/
+import { handleGeo } from './geo/api.js'
+
+const IMAGE = /^\/(img|thumb)\/[0-9a-f]{2}\/[0-9a-f]{40}\.webp$/
+const GEO_ASSET = /^\/atlas\/[a-z0-9_/-]+\.(webp|png|json)$/
+const TYPES = { webp: 'image/webp', png: 'image/png', json: 'application/json' }
 
 function same(a, b) {
   // comparación en tiempo constante
@@ -18,33 +25,66 @@ function same(a, b) {
   return diff === 0
 }
 
+/** Adaptador D1 → interfaz de los manejadores ({ all, first }). */
+const d1 = (db) => ({
+  all: async (sql, params = []) => (await db.prepare(sql).bind(...params).all()).results,
+  first: async (sql, params = []) => (await db.prepare(sql).bind(...params).first()) ?? null,
+})
+
+/** Respuesta en caché del borde (la clave de acceso no forma parte de la clave de caché). */
+async function cached(request, url, ctx, make) {
+  const params = new URLSearchParams(url.search)
+  params.delete('k')
+  const cacheKey = new Request(`${url.origin}${url.pathname}?${params}`, { method: 'GET' })
+  const cache = caches.default
+  const hit = await cache.match(cacheKey)
+  if (hit) return hit
+  const response = await make()
+  if (request.method === 'GET' && response.ok) ctx.waitUntil(cache.put(cacheKey, response.clone()))
+  return response
+}
+
+async function fromBucket(env, key, type, request) {
+  const object = await env.IMAGES.get(key)
+  if (!object) return new Response('Not found', { status: 404 })
+  const headers = new Headers()
+  object.writeHttpMetadata(headers)
+  headers.set('etag', object.httpEtag)
+  headers.set('content-type', type)
+  // privada: el navegador la guarda, pero ningún proxy compartido
+  headers.set('cache-control', 'private, max-age=31536000, immutable')
+  headers.set('access-control-allow-origin', '*')
+  return new Response(request.method === 'HEAD' ? null : object.body, { headers })
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 })
-    if (!PATH.test(url.pathname)) return new Response('Not found', { status: 404 })
+    const isImage = IMAGE.test(url.pathname)
+    const isAsset = GEO_ASSET.test(url.pathname) && !url.pathname.includes('..')
+    const isApi = url.pathname.startsWith('/api/geo/')
+    if (!isImage && !isAsset && !isApi) return new Response('Not found', { status: 404 })
 
     const key = url.searchParams.get('k') ?? request.headers.get('x-access-key')
     if (!env.ACCESS_KEY || !same(key, env.ACCESS_KEY)) return new Response('Forbidden', { status: 403 })
 
-    // caché del borde: la clave no forma parte de la clave de caché
-    const cache = caches.default
-    const cacheKey = new Request(`${url.origin}${url.pathname}`, { method: 'GET' })
-    const hit = await cache.match(cacheKey)
-    if (hit) return hit
+    if (isImage || isAsset) {
+      const type = isImage ? 'image/webp' : TYPES[url.pathname.split('.').pop()]
+      return cached(request, url, ctx, () => fromBucket(env, url.pathname.slice(1), type, request))
+    }
 
-    const object = await env.IMAGES.get(url.pathname.slice(1))
-    if (!object) return new Response('Not found', { status: 404 })
-
-    const headers = new Headers()
-    object.writeHttpMetadata(headers)
-    headers.set('etag', object.httpEtag)
-    headers.set('content-type', 'image/webp')
-    // privada: el navegador la guarda, pero ningún proxy compartido
-    headers.set('cache-control', 'private, max-age=31536000, immutable')
-    headers.set('access-control-allow-origin', '*')
-    const response = new Response(request.method === 'HEAD' ? null : object.body, { headers })
-    if (request.method === 'GET') await cache.put(cacheKey, response.clone())
-    return response
+    if (!env.GEO) return Response.json({ error: 'sin base de geografía' }, { status: 503 })
+    return cached(request, url, ctx, async () => {
+      const { status, body } = await handleGeo(d1(env.GEO), url)
+      return Response.json(body, {
+        status,
+        headers: {
+          'access-control-allow-origin': '*',
+          // los datos cambian solo al publicar: una hora en el navegador y en el borde
+          'cache-control': status === 200 ? 'private, max-age=3600' : 'no-store',
+        },
+      })
+    })
   },
 }

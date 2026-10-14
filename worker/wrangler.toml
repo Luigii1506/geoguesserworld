@@ -6,3 +6,10 @@ workers_dev = true
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "geoguesser"
+
+# base de geografía (geo/schema.sql); `npm run pipeline -- geo publish` la crea y rellena
+# y escribe aquí su database_id
+[[d1_databases]]
+binding = "GEO"
+database_name = "geomastery-geo"
+database_id = "pendiente"

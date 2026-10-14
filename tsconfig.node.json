@@ -10,6 +10,7 @@
     "moduleDetection": "force",
     "noEmit": true,
     "strict": true,
+    "resolveJsonModule": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
   "include": ["vite.config.ts"]

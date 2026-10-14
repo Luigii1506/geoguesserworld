@@ -1,8 +1,10 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { join, normalize } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { handleGeo, type GeoDb } from './worker/src/geo/api.js'
 
 // Las imágenes de plonkit.net tienen protección anti-hotlink (403 sin su
 // propio Referer), así que el servidor local las pide con ese header. Cada
@@ -90,8 +92,66 @@ function ownImages(): Plugin {
   }
 }
 
+// API de geografía en desarrollo: los mismos manejadores que el Worker, sobre
+// data/geo.db (se reabre si el pipeline la reconstruye) y las capas de
+// data/geo-assets servidas en /atlas/… (en producción, R2 vía el Worker).
+const GEO_DB = join(process.cwd(), 'data/geo.db')
+const GEO_ASSETS = join(process.cwd(), 'data/geo-assets')
+const ASSET_TYPES: Record<string, string> = { webp: 'image/webp', png: 'image/png', json: 'application/json' }
+function geoApi(): Plugin {
+  let db: DatabaseSync | null = null
+  let opened = 0
+  const adapter: GeoDb = {
+    all: async (sql, params = []) => conn().prepare(sql).all(...(params as never[])) as Record<string, unknown>[],
+    first: async (sql, params = []) => (conn().prepare(sql).get(...(params as never[])) as Record<string, unknown>) ?? null,
+  }
+  function conn() {
+    const mtime = statSync(GEO_DB).mtimeMs
+    if (!db || mtime !== opened) {
+      db?.close()
+      db = new DatabaseSync(GEO_DB, { readOnly: true })
+      opened = mtime
+    }
+    return db
+  }
+  const handler = async (req: { url?: string }, res: import('node:http').ServerResponse, next: () => void) => {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    if (url.pathname.startsWith('/atlas/')) {
+      const file = normalize(join(GEO_ASSETS, url.pathname))
+      if (!file.startsWith(GEO_ASSETS) || !existsSync(file)) {
+        res.statusCode = 404
+        return res.end()
+      }
+      res.setHeader('content-type', ASSET_TYPES[file.split('.').pop() ?? ''] ?? 'application/octet-stream')
+      res.setHeader('cache-control', 'no-cache')
+      return res.end(readFileSync(file))
+    }
+    if (!url.pathname.startsWith('/api/geo')) return next()
+    if (!existsSync(GEO_DB)) {
+      res.statusCode = 503
+      res.setHeader('content-type', 'application/json')
+      return res.end(JSON.stringify({ error: 'falta data/geo.db: npm run pipeline -- geo build' }))
+    }
+    try {
+      const { status, body } = await handleGeo(adapter, url)
+      res.statusCode = status
+      res.setHeader('content-type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify(body))
+    } catch (e) {
+      res.statusCode = 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: (e as Error).message }))
+    }
+  }
+  return {
+    name: 'geo-api',
+    configureServer: (server) => void server.middlewares.use(handler),
+    configurePreviewServer: (server) => void server.middlewares.use(handler),
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), ownImages(), plonkitImages()],
+  plugins: [react(), ownImages(), plonkitImages(), geoApi()],
   server: { port: 5173 },
   preview: { port: 4173 },
 })
