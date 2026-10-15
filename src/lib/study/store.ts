@@ -144,6 +144,7 @@ export const itemKey = {
   hint: (clusterId: number) => `t:${clusterId}`,
   photo: (img: string) => `f:${img}`,
   place: (entityId: string) => `g:${entityId}`,
+  twins: (a: string, b: string) => `d:${[a, b].sort().join('_')}`,
 }
 
 export const isSaved = (s: StudyState, key: string) => Boolean(s.items[key] && !s.items[key].deleted)
@@ -219,6 +220,13 @@ export function reviewCard(card: string, grade: Grade, extra: { cc?: string | nu
   const review: Review = { id: newId(), card, rating: grade, at: now.getTime(), cc: extra.cc ?? null, answer: extra.answer ?? null, ms: extra.ms }
   const next = { ...state, cards: { ...state.cards, [card]: rec }, reviews: [...state.reviews, review].slice(-MAX_REVIEWS) }
   commit({ ...next, dirty: { ...mark(next, 'cards', [card]), reviews: [...state.dirty.reviews, review.id] } })
+}
+
+// ── exámenes (van en los ajustes: son pocos y se sincronizan con ellos) ──
+const MAX_EXAMS = 60
+export function addExam(r: Omit<import('./types').ExamResult, 'at'>) {
+  const exams = [...(state.settings.data.exams ?? []), { ...r, at: Date.now() }].slice(-MAX_EXAMS)
+  setSettings({ exams })
 }
 
 // ── ajustes ──

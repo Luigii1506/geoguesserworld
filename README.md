@@ -242,6 +242,15 @@ tarjetas ([src/lib/study/cards.ts](src/lib/study/cards.ts)):
 - **recordar**: «Hungría · bolardos: ¿cómo son?» → lo piensas, lo ves y te puntúas
 - **ubicar**: «¿dónde está Debrecen?» → tocas el mapa y cuenta la distancia (la tolerancia
   depende del tamaño del lugar)
+- **Street View**: la vista del ejemplo de una pista (con la dirección tapada) → ¿en qué país estás?
+- **gemelos**: dos fotos del mismo tema, una de cada país del duelo → ¿cuál es cuál?
+
+Se guarda también en bloque: lo esencial de un país, un tema, hasta 120 fotos de Explorar
+(repartidas entre países) o una lista de Geografía. Hay mazos automáticos (lo que más fallas,
+determinantes, gemelos), atajos de teclado (1–4 y espacio), un **examen** por país (20
+preguntas contra el reloj que no tocan el repaso, con historial de notas), tu progreso dentro
+de la guía de cada país y en cada pista, y estadísticas de actividad, dominio por tema y
+velocidad. La app instalada muestra los pendientes en su icono.
 
 El repaso usa **FSRS** (el algoritmo de Anki, vía `ts-fsrs`,
 [src/lib/study/fsrs.ts](src/lib/study/fsrs.ts)): programa cada tarjeta para cuando la
@@ -254,6 +263,9 @@ Todo vive primero en el dispositivo (IndexedDB, [src/lib/study/store.ts](src/lib
 y se sincroniza con tu cuenta en segundo plano (`POST /api/me/sync`, Neon,
 [worker/src/me.js](worker/src/me.js) y [worker/src/db/study.sql](worker/src/db/study.sql)):
 funciona sin conexión y en varios dispositivos; gana el cambio más reciente.
+
+`npm test` prueba la lógica del estudio (FSRS y su migración, sesiones, estadísticas, la mezcla
+entre dispositivos) y la validación del servidor.
 
 ## Procedencia y licencias
 

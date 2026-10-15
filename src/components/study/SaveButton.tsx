@@ -125,17 +125,23 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
  * Guarda de golpe un conjunto (lo esencial de un país, un tema entero) en un mazo con su
  * nombre. Muestra cuántas se añadieron y un enlace para estudiarlas.
  */
-export function StudyAllButton({ label, deckName, items, className = 'btn' }: { label: string; deckName: string; items: () => NewItem[]; className?: string }) {
+export function StudyAllButton({ label, deckName, items, className = 'btn' }: { label: string; deckName: string; items: () => NewItem[] | Promise<NewItem[]>; className?: string }) {
   const s = useStudy()
-  const [done, setDone] = useState<{ n: number; deck: string } | null>(null)
-  const go = () => {
-    const list = items()
-    if (!list.length) return
-    const deck = createDeck(deckName)
-    const fresh = list.filter((i) => !isSaved(s, i.key)).length
-    saveItems(list, [deck])
-    setSettings({ lastDeck: deck })
-    setDone({ n: fresh, deck })
+  const [done, setDone] = useState<{ n: number; total: number; deck: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const go = async () => {
+    setBusy(true)
+    try {
+      const list = await items()
+      if (!list.length) return
+      const deck = createDeck(deckName)
+      const fresh = list.filter((i) => !isSaved(s, i.key)).length
+      saveItems(list, [deck])
+      setSettings({ lastDeck: deck })
+      setDone({ n: fresh, total: list.length, deck })
+    } finally {
+      setBusy(false)
+    }
   }
   if (done) {
     return (
@@ -145,5 +151,5 @@ export function StudyAllButton({ label, deckName, items, className = 'btn' }: { 
       </span>
     )
   }
-  return <button type="button" className={className} onClick={go}>☆ {label}</button>
+  return <button type="button" className={className} onClick={go} disabled={busy}>{busy ? 'Guardando…' : `☆ ${label}`}</button>
 }

@@ -1800,3 +1800,85 @@ picture { display: contents; }
 .locate-zoom { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 4px; }
 .locate-zoom .btn { width: 36px; height: 36px; padding: 0; font-size: 1.2rem; background: var(--surface); border-color: var(--line-2); }
 @media (max-width: 600px) { .study .question-img { max-height: 38vh; } }
+
+/* ── atajos de teclado ── */
+kbd {
+  display: inline-grid; place-items: center; min-width: 1.35em; height: 1.35em; padding: 0 0.25em; margin-right: 0.35em;
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; background: var(--sunken);
+  font-family: var(--font-mono); font-size: 0.7em; line-height: 1; color: var(--ink-3); vertical-align: 0.1em;
+}
+.btn-primary kbd { background: transparent; border-color: currentColor; color: inherit; opacity: 0.7; }
+@media (hover: none) { kbd { display: none; } }
+
+/* ── tarjetas de Street View: la dirección y el enlace de Google se tapan hasta responder ── */
+.sv-quiz { position: relative; }
+.sv-quiz:not(.answered)::after {
+  content: ''; position: absolute; top: 0; left: 0; width: min(360px, 82%); height: 96px; z-index: 2;
+  background: var(--sunken); border-bottom-right-radius: var(--r-lg); pointer-events: none;
+}
+.sv-quiz:not(.answered) .sv-bar { display: none; }
+
+/* ── gemelos: foto contra foto ── */
+.twins { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.twin { position: relative; padding: 0; border: 2px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--sunken); cursor: pointer; display: grid; }
+.twin img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.twin:hover:not(:disabled) { border-color: var(--ink-3); }
+.twin.right { border-color: var(--accent); }
+.twin.wrong { border-color: var(--danger); }
+.twin-label { padding: 0.5rem 0.7rem; font-size: 0.9rem; font-weight: 500; text-align: left; background: var(--surface); color: var(--ink); }
+
+/* ── mazos automáticos y selección de guardados ── */
+.deck-list li.smart { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.deck-auto { color: var(--accent); font-weight: 500; }
+.saved-tools { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.4rem; min-height: 38px; }
+.saved-check { flex: none; margin-top: 1.2rem; accent-color: var(--accent); width: 16px; height: 16px; }
+.saved-list li.on { background: var(--accent-soft); }
+
+/* ── actividad (calendario) ── */
+.activity { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 0.3rem; }
+.activity-week { display: grid; grid-template-rows: repeat(7, 13px); gap: 3px; }
+.activity-day { width: 13px; height: 13px; border-radius: 3px; background: var(--sunken); }
+.activity-day.l-1 { background: transparent; }
+.activity-day.l1 { background: color-mix(in srgb, var(--accent) 30%, var(--sunken)); }
+.activity-day.l2 { background: color-mix(in srgb, var(--accent) 55%, var(--sunken)); }
+.activity-day.l3 { background: color-mix(in srgb, var(--accent) 78%, var(--sunken)); }
+.activity-day.l4 { background: var(--accent); }
+
+.topic-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.topic-bars li { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: 0.6rem; align-items: center; font-size: 0.9rem; }
+.topic-bars .deck-bar { max-width: none; height: 6px; }
+
+/* ── examen ── */
+.exam-clock { font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-2); }
+.exam-history { display: flex; align-items: flex-end; gap: 4px; height: 46px; margin: 0.4rem 0; }
+.exam-bar { position: relative; display: flex; align-items: flex-end; width: 18px; height: 100%; background: var(--sunken); border-radius: 3px; }
+.exam-bar > span { display: block; width: 100%; background: var(--accent); border-radius: 3px; }
+.exam-bar small { position: absolute; top: -1px; left: 0; right: 0; text-align: center; font-size: 0.6rem; color: var(--ink-3); }
+.exam-recent { display: grid; gap: 0.3rem; margin-top: 0.8rem; }
+.exam-row { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 0.8rem; align-items: center; }
+.exam-row .exam-history { margin: 0; height: 32px; }
+
+/* ── tu progreso en la guía de un país ── */
+.cg-progress { display: grid; gap: 0.6rem; margin: 0.4rem 0 0.2rem; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.cg-progress .eyebrow { color: var(--accent); }
+.cg-progress p { margin: 0; }
+.cg-progress-stats { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+.cg-progress-stats div { display: grid; }
+.cg-progress-stats strong { font-family: var(--font-display); font-size: 1.4rem; font-weight: 500; line-height: 1.1; }
+.cg-progress-stats span { font-size: 0.76rem; color: var(--ink-2); }
+.empty-progress p { color: var(--ink-2); font-size: 0.92rem; }
+.empty-progress .btn { justify-self: start; }
+.hint-known { font-size: 0.76rem; font-weight: 500; padding: 0.1rem 0.5rem; border-radius: 999px; }
+.hint-known.good { background: var(--accent-soft); color: var(--accent); }
+.hint-known.mid { background: color-mix(in srgb, #c9a43d 18%, var(--surface)); color: #8a6d1d; }
+.hint-known.low { background: var(--danger-soft); color: var(--danger); }
+
+/* ── inicio: lo de hoy ── */
+.home-today {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem 2rem; flex-wrap: wrap;
+  margin-bottom: 2rem; padding: 1.2rem 1.4rem; border: 1px solid var(--accent); border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+}
+.home-today h2 { font-family: var(--font-display); font-weight: 500; font-size: clamp(1.4rem, 3vw, 1.9rem); margin: 0.15rem 0; }
+.home-today p { margin: 0; }
+.dd-save { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin: 0.4rem 0 1rem; }

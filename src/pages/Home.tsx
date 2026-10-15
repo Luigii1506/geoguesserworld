@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useMeta } from '../lib/data'
 import { useStudy } from '../lib/study/store'
-import { dueCount } from '../lib/study/cards'
+import { dueCount, scopeCounts } from '../lib/study/cards'
+import { masteryByCountry, reviewsToday, streak } from '../lib/study/stats'
+import { savedItems, type StudyState } from '../lib/study/store'
+import { countryFlag, countryLabel, useCountryMap } from '../lib/data'
 
 // Marco StoryBrand (Donald Miller): el jugador es el héroe, GeoMastery el guía,
 // un plan de tres pasos y una sola acción principal.
@@ -22,6 +25,7 @@ export default function Home() {
 
   return (
     <div>
+      {study.ready && keys.length > 0 && <Today s={study} due={due} />}
       <section className="hero">
         <span className="eyebrow">GeoGuessr, con método</span>
         <h1>Reconoce el país en segundos, no en minutos.</h1>
@@ -87,5 +91,36 @@ export default function Home() {
         <Link to="/entrenar" className="btn btn-primary btn-lg">Empieza a entrenar</Link>
       </section>
     </div>
+  )
+}
+
+/** Si ya estudias: lo de hoy primero (repasos, racha, objetivo y el país por el que seguir). */
+function Today({ s, due }: { s: StudyState; due: number }) {
+  const map = useCountryMap()
+  const counts = scopeCounts(s)
+  const today = reviewsToday(s)
+  const goal = s.settings.data.goal
+  const days = streak(s)
+  // el país por el que seguir: el que tiene más pendiente de lo guardado o, si no, el más flojo
+  const ccs = [...new Set(savedItems(s).map((i) => i.cc).filter((x): x is string => Boolean(x)))]
+  const busiest = ccs.map((cc) => [cc, scopeCounts(s, { cc }).due] as const).sort((a, b) => b[1] - a[1])[0]
+  const weakest = [...masteryByCountry(s).values()].filter((x) => x.cards >= 3).sort((a, b) => a.score - b.score)[0]
+  const next = busiest && busiest[1] > 0 ? busiest[0] : weakest?.cc
+  const pending = due + counts.newAvailable
+  return (
+    <section className="home-today">
+      <div>
+        <span className="eyebrow">Hoy</span>
+        <h2>{pending > 0 ? `${pending} ${pending === 1 ? 'tarjeta' : 'tarjetas'} esperando` : 'Al día con tu repaso'}</h2>
+        <p className="muted">
+          {today}/{goal} repasos hoy{days > 0 ? ` · ${days} ${days === 1 ? 'día seguido' : 'días seguidos'}` : ''}
+          {next ? <> · sigue con {countryFlag(map, next)} {countryLabel(map, next)}</> : null}
+        </p>
+      </div>
+      <div className="row">
+        <Link to="/entrenar" className="btn btn-primary btn-lg">{pending > 0 ? 'Repasar ahora' : 'Mi estudio'}</Link>
+        {next && <Link to={`/pais/${next}`} className="btn btn-lg">Guía de {countryLabel(map, next)}</Link>}
+      </div>
+    </section>
   )
 }

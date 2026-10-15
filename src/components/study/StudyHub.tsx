@@ -1,12 +1,14 @@
-import { lazy, Suspense, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { countryFlag, countryLabel, useCountryMap, type CountryRow } from '../../lib/data'
-import { buildSession, cardsOf, inScope, scopeCounts, type CardSpec, type SessionScope } from '../../lib/study/cards'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { countryFlag, countryLabel, loadJson, useCountryMap, type CountryRow } from '../../lib/data'
+import { buildSession, cardsOf, inScope, scopeCounts, SMART_DECKS, type CardSpec, type SessionScope } from '../../lib/study/cards'
 import { isNew, retrievability, untilText } from '../../lib/study/fsrs'
-import { accuracy, confusions, forecast, masteryByCountry, reviewsToday, streak } from '../../lib/study/stats'
-import { deleteDeck, exportStudy, importStudy, liveDecks, renameDeck, savedItems, setNote, setSettings, unsaveItem, useStudy } from '../../lib/study/store'
+import { twinsItem } from '../../lib/study/items'
+import { accuracy, calendar, confusions, forecast, masteryByCountry, masteryByTopic, reviewsToday, speed, streak } from '../../lib/study/stats'
+import { deleteDeck, exportStudy, importStudy, isSaved, liveDecks, renameDeck, saveItems, savedItems, setItemDecks, setNote, setSettings, unsaveItem, useStudy } from '../../lib/study/store'
+import { ExamHistory } from './ExamSession'
 import { lastSyncAt, syncNow, useSyncStatus } from '../../lib/study/sync'
-import type { HintData, PhotoData, PlaceData, StudyItem } from '../../lib/study/types'
+import type { HintData, PhotoData, PlaceData, StudyItem, TwinsData } from '../../lib/study/types'
 import { Img } from '../Img'
 
 const WorldMap = lazy(() => import('../WorldMap'))
@@ -22,10 +24,10 @@ const tone = (x: number) => SCALE[Math.min(SCALE.length - 1, Math.floor(x * SCAL
 const pct = (x: number) => `${Math.round(x * 100)} %`
 const dayName = (iso: string, i: number) => (i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : new Date(`${iso}T12:00:00`).toLocaleDateString('es', { weekday: 'short' }))
 
-export default function StudyHub({ initialDeck }: { initialDeck?: string }) {
+export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?: string; initialCountry?: string }) {
   const s = useStudy()
   const map = useCountryMap()
-  const [scope, setScope] = useState<SessionScope>(initialDeck ? { deck: initialDeck } : {})
+  const [scope, setScope] = useState<SessionScope>(initialDeck ? { deck: initialDeck } : initialCountry ? { cc: initialCountry } : {})
   const [size, setSize] = useState(20)
   const [session, setSession] = useState<CardSpec[] | null>(null)
   // cada sesión es nueva (su cola y sus resultados empiezan de cero)
@@ -61,7 +63,7 @@ export default function StudyHub({ initialDeck }: { initialDeck?: string }) {
   const pending = counts.due + counts.newAvailable
   // las que tocan más tarde hoy (pasos cortos de FSRS tras aprender o fallar)
   const laterToday = Math.max(0, forecast(s, 1)[0].n - counts.due)
-  const scopeName = scope.deck ? s.decks[scope.deck]?.name : scope.cc ? countryLabel(map, scope.cc) : 'Todo'
+  const scopeName = scope.smart ? SMART_DECKS.find((d) => d.id === scope.smart)?.name : scope.deck ? s.decks[scope.deck]?.name : scope.cc ? countryLabel(map, scope.cc) : 'Todo'
 
   return (
     <div className="study-hub">
@@ -86,7 +88,7 @@ export default function StudyHub({ initialDeck }: { initialDeck?: string }) {
             <select className="select" value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Tarjetas por sesión">
               {SIZES.map((n) => <option key={n} value={n}>{n} por sesión</option>)}
             </select>
-            {(scope.deck || scope.cc) && <button className="btn btn-quiet" onClick={() => setScope({})}>Ver todo</button>}
+            {(scope.deck || scope.cc || scope.smart) && <button className="btn btn-quiet" onClick={() => setScope({})}>Ver todo</button>}
           </div>
         </div>
         <div className="study-kpis">
@@ -108,8 +110,11 @@ export default function StudyHub({ initialDeck }: { initialDeck?: string }) {
         <Forecast />
         <Accuracy />
       </div>
+      <Activity />
       <Mastery start={start} />
+      <Topics />
       <Confusions />
+      <Exams />
       <SettingsPanel />
       <p className="muted small" style={{ marginTop: '2rem' }}>
         <Link to="/entrenar?modo=libre">Práctica libre</Link>: preguntas al azar de todas las guías, sin guardar nada.
@@ -177,7 +182,7 @@ function Decks({ scope, setScope, start }: { scope: SessionScope; setScope: (s: 
     let sum = 0
     let n = 0
     for (const it of items) {
-      if (!inScope(it, sc)) continue
+      if (!inScope(it, sc, s)) continue
       for (const c of cardsOf(it)) {
         const st = s.cards[c.key]?.state
         n++
@@ -186,18 +191,24 @@ function Decks({ scope, setScope, start }: { scope: SessionScope; setScope: (s: 
     }
     return n ? sum / n : 0
   }
-  const rows: { sc: SessionScope; name: string; id?: string }[] = [{ sc: {}, name: 'Todo lo guardado' }, ...decks.map((d) => ({ sc: { deck: d.id }, name: d.name, id: d.id }))]
+  // mazos automáticos (solo los que tienen algo) y los tuyos
+  const smart = SMART_DECKS.map((d) => ({ sc: { smart: d.id } as SessionScope, name: d.name, hint: d.hint })).filter((r) => scopeCounts(s, r.sc).items > 0)
+  const rows: { sc: SessionScope; name: string; id?: string; hint?: string }[] = [
+    { sc: {}, name: 'Todo lo guardado' },
+    ...smart,
+    ...decks.map((d) => ({ sc: { deck: d.id }, name: d.name, id: d.id })),
+  ]
 
   return (
     <section className="filter-group study-section">
       <h2>Mazos</h2>
       <ul className="deck-list">
-        {rows.map(({ sc, name, id }) => {
+        {rows.map(({ sc, name, id, hint }) => {
           const c = scopeCounts(s, sc)
           const m = mastery(sc)
-          const active = (scope.deck ?? '') === (sc.deck ?? '') && !scope.cc
+          const active = (scope.deck ?? '') === (sc.deck ?? '') && (scope.smart ?? '') === (sc.smart ?? '') && !scope.cc
           return (
-            <li key={id ?? 'all'} className={active ? 'on' : ''}>
+            <li key={id ?? sc.smart ?? 'all'} className={`${active ? 'on' : ''} ${sc.smart ? 'smart' : ''}`} title={hint}>
               <button className="deck-main" onClick={() => setScope(sc)}>
                 {editing === id && id ? (
                   <input
@@ -212,7 +223,10 @@ function Decks({ scope, setScope, start }: { scope: SessionScope; setScope: (s: 
                 ) : (
                   <strong>{name}</strong>
                 )}
-                <span className="muted small">{c.items} {c.items === 1 ? 'guardado' : 'guardados'} · {c.due} por repasar · {c.newAvailable} {c.newAvailable === 1 ? 'nueva' : 'nuevas'}</span>
+                <span className="muted small">
+                  {sc.smart && <span className="deck-auto">automático · </span>}
+                  {c.items} {c.items === 1 ? 'guardado' : 'guardados'} · {c.due} por repasar{!sc.smart || sc.smart !== 'weak' ? ` · ${c.newAvailable} ${c.newAvailable === 1 ? 'nueva' : 'nuevas'}` : ''}
+                </span>
                 <span className="deck-bar" title={`Dominio ${pct(m)}`}><span style={{ width: `${m * 100}%`, background: tone(m) }} /></span>
               </button>
               <div className="deck-actions">
@@ -245,6 +259,7 @@ function Decks({ scope, setScope, start }: { scope: SessionScope; setScope: (s: 
 }
 
 function itemTitle(i: StudyItem): string {
+  if (i.kind === 'twins') return `${(i.data as TwinsData).a.toUpperCase()} ↔ ${(i.data as TwinsData).b.toUpperCase()}`
   if (i.kind === 'place') return (i.data as PlaceData).name
   if (i.kind === 'photo') return (i.data as PhotoData).catName ?? (i.data as PhotoData).cat
   return (i.data as HintData).text
@@ -255,8 +270,28 @@ function Saved({ scope }: { scope: SessionScope }) {
   const map = useCountryMap()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const decks = liveDecks(s)
+  const toggle = (k: string) => setSel((x) => {
+    const y = new Set(x)
+    if (y.has(k)) y.delete(k)
+    else y.add(k)
+    return y
+  })
+  const moveTo = (deck: string) => {
+    for (const k of sel) {
+      const it = s.items[k]
+      if (it) setItemDecks(k, deck === '' ? [] : [...it.decks.filter((d) => d !== scope.deck), deck])
+    }
+    setSel(new Set())
+  }
+  const removeSel = () => {
+    if (!confirm(`¿Quitar ${sel.size} de Mi estudio?`)) return
+    for (const k of sel) unsaveItem(k)
+    setSel(new Set())
+  }
   const list = savedItems(s)
-    .filter((i) => inScope(i, scope))
+    .filter((i) => inScope(i, scope, s))
     .filter((i) => !q || itemTitle(i).toLowerCase().includes(q.toLowerCase()) || i.note.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => b.created_at - a.created_at)
   return (
@@ -268,18 +303,38 @@ function Saved({ scope }: { scope: SessionScope }) {
       {open && (
         <>
           <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en lo guardado y tus notas" style={{ marginBottom: '0.8rem' }} />
+          <div className="saved-tools">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={sel.size > 0 && list.slice(0, 200).every((i) => sel.has(i.key))}
+                onChange={(e) => setSel(e.target.checked ? new Set(list.slice(0, 200).map((i) => i.key)) : new Set())}
+              /> {sel.size ? `${sel.size} elegidos` : 'Elegir todos'}
+            </label>
+            {sel.size > 0 && (
+              <>
+                <select className="select" value="" onChange={(e) => e.target.value !== '-' && moveTo(e.target.value)} aria-label="Mover a un mazo">
+                  <option value="-">Mover a…</option>
+                  {decks.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  <option value="">Sin mazo</option>
+                </select>
+                <button className="btn btn-quiet" onClick={removeSel}>Quitar</button>
+              </>
+            )}
+          </div>
           <ul className="saved-list">
             {list.slice(0, 200).map((i) => {
               const img = i.kind === 'photo' ? (i.data as PhotoData).img : i.kind === 'place' ? (i.data as PlaceData).thumb : (i.data as HintData).img
               const r = Math.max(...cardsOf(i).map((c) => retrievability(s.cards[c.key]?.state)))
               return (
-                <li key={i.key}>
-                  <span className="saved-img">{img ? <Img src={img} sizes="56px" /> : <span>{i.kind === 'place' ? '◎' : '¶'}</span>}</span>
+                <li key={i.key} className={sel.has(i.key) ? 'on' : ''}>
+                  <input type="checkbox" className="saved-check" checked={sel.has(i.key)} onChange={() => toggle(i.key)} aria-label="Elegir" />
+                  <span className="saved-img">{img ? <Img src={img} sizes="56px" /> : <span>{i.kind === 'place' ? '◎' : i.kind === 'twins' ? '⇄' : '¶'}</span>}</span>
                   <span className="saved-main">
                     <span className="saved-title">{itemTitle(i)}</span>
                     <span className="muted small">
                       {i.cc && <>{countryFlag(map, i.cc)} {countryLabel(map, i.cc)} · </>}
-                      {i.kind === 'hint' ? (i.data as HintData).catName ?? 'Pista' : i.kind === 'photo' ? 'Foto' : (i.data as PlaceData).kindLabel ?? 'Lugar'}
+                      {i.kind === 'hint' ? (i.data as HintData).catName ?? 'Pista' : i.kind === 'photo' ? 'Foto' : i.kind === 'twins' ? 'Gemelos' : (i.data as PlaceData).kindLabel ?? 'Lugar'}
                       {i.decks.length > 0 && <> · {i.decks.map((d) => s.decks[d]?.name).filter(Boolean).join(', ')}</>}
                       {r > 0 && <> · dominio {pct(r)}</>}
                     </span>
@@ -396,15 +451,36 @@ function Mastery({ start }: { start: (s: SessionScope, extra?: boolean) => void 
   )
 }
 
+type DuelIndex = { a: string; b: string; headline: string | null }[]
+
 function Confusions() {
   const s = useStudy()
   const map = useCountryMap()
   const list = useMemo(() => confusions(s).slice(0, 10), [s.reviews]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [duels, setDuels] = useState<DuelIndex | null>(null)
+  const [added, setAdded] = useState<number | null>(null)
+  useEffect(() => {
+    if (list.length) loadJson<DuelIndex>('/community/duels.json').then((d) => setDuels(d ?? []))
+  }, [list.length > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+  const duelOf = (a: string, b: string) => duels?.find((d) => (d.a === a && d.b === b) || (d.a === b && d.b === a))
+  // tus confusiones que tienen duelo, como tarjetas de gemelos
+  const asTwins = () => {
+    const items = list.map((c) => duelOf(c.a, c.b)).filter((d): d is DuelIndex[number] => Boolean(d)).map((d) => twinsItem(d.a, d.b, d.headline))
+    const fresh = items.filter((i) => !isSaved(s, i.key))
+    saveItems(items)
+    setAdded(fresh.length)
+  }
   if (!list.length) return null
   return (
     <section className="filter-group study-section">
       <h2>Países que confundes</h2>
       <p className="muted small">Cuando respondes uno por otro. Salen antes como opción en tus preguntas, y en un duelo los ves lado a lado.</p>
+      {duels && list.some((c) => duelOf(c.a, c.b)) && (
+        <p className="row">
+          <button className="btn" onClick={asTwins}>⇄ Estudiarlos como gemelos</button>
+          {added !== null && <span className="muted small">{added ? `${added} parejas añadidas al mazo automático «Gemelos».` : 'Ya estaban en «Gemelos».'}</span>}
+        </p>
+      )}
       <ul className="confusion-list">
         {list.map((c) => (
           <li key={`${c.a}>${c.b}`}>
@@ -416,6 +492,116 @@ function Confusions() {
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+const LEVELS = [0, 1, 5, 15, 30]
+function Activity() {
+  const s = useStudy()
+  const weeks = calendar(s, 20)
+  const total = weeks.flat().reduce((n, d) => n + Math.max(0, d.n), 0)
+  const active = weeks.flat().filter((d) => d.n > 0).length
+  return (
+    <section className="filter-group study-section">
+      <h2>Actividad</h2>
+      <p className="muted small">{total.toLocaleString('es')} repasos en {active} {active === 1 ? 'día' : 'días'} de las últimas 20 semanas.</p>
+      <div className="activity" role="img" aria-label="Calendario de repasos">
+        {weeks.map((w, i) => (
+          <div key={i} className="activity-week">
+            {w.map((d) => {
+              const lvl = d.n < 0 ? -1 : LEVELS.filter((x) => d.n >= x).length - 1
+              return <span key={d.day} className={`activity-day l${lvl}`} title={d.n >= 0 ? `${new Date(`${d.day}T12:00:00`).toLocaleDateString('es')}: ${d.n} repasos` : undefined} />
+            })}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Topics() {
+  const s = useStudy()
+  const list = useMemo(() => masteryByTopic(s), [s.cards, s.items]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sp = useMemo(() => speed(s), [s.reviews]) // eslint-disable-line react-hooks/exhaustive-deps
+  const map = useCountryMap()
+  if (!list.length && !sp.n) return null
+  return (
+    <div className="study-grid">
+      {list.length > 0 && (
+        <section className="filter-group study-section">
+          <h2>Por tema</h2>
+          <ul className="topic-bars">
+            {list.slice(0, 10).map((t) => (
+              <li key={t.cat}>
+                <span>{t.name}</span>
+                <span className="deck-bar"><span style={{ width: `${t.score * 100}%`, background: tone(t.score) }} /></span>
+                <span className="muted small num">{pct(t.score)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {sp.n > 0 && (
+        <section className="filter-group study-section">
+          <h2>Velocidad</h2>
+          <div className="stat-line study-stats">
+            <div><strong>{(sp.median / 1000).toFixed(1).replace('.', ',')} s</strong><span>para reconocer (mediana)</span></div>
+            <div><strong>{sp.n}</strong><span>aciertos medidos</span></div>
+          </div>
+          {sp.slow.length > 0 && (
+            <>
+              <span className="eyebrow">Donde más tardas</span>
+              <div className="chips">
+                {sp.slow.map((x) => <span key={x.cc} className="chip">{countryFlag(map, x.cc)} {countryLabel(map, x.cc)} <span className="muted">{(x.median / 1000).toFixed(1).replace('.', ',')} s</span></span>)}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}
+
+function Exams() {
+  const s = useStudy()
+  const map = useCountryMap()
+  const navigate = useNavigate()
+  const exams = s.settings.data.exams ?? []
+  const options = useMemo(() => [...map.values()].filter((c) => c.groups > 0).sort((a, b) => (a.name_es ?? a.name).localeCompare(b.name_es ?? b.name, 'es')), [map])
+  // por defecto, el país más estudiado
+  const studied = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of savedItems(s)) if (i.cc) m.set(i.cc, (m.get(i.cc) ?? 0) + 1)
+    return [...m].sort((a, b) => b[1] - a[1]).map(([cc]) => cc)
+  }, [s.items]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [cc, setCc] = useState('')
+  const pick = cc || studied[0] || ''
+  const recent = [...new Set(exams.slice().reverse().map((e) => e.cc))].slice(0, 6)
+  return (
+    <section className="filter-group study-section">
+      <h2>Examen</h2>
+      <p className="muted small">20 preguntas al azar de un país, contra el reloj. No cambia tu repaso: sirve para ver cuánto has avanzado.</p>
+      <div className="row">
+        <select className="select" value={pick} onChange={(e) => setCc(e.target.value)} aria-label="País del examen">
+          {options.map((c) => <option key={c.code} value={c.code}>{c.flag} {c.name_es ?? c.name}</option>)}
+        </select>
+        <button className="btn btn-primary" disabled={!pick} onClick={() => navigate(`/entrenar?examen=${pick}`)}>Empezar examen</button>
+      </div>
+      {recent.length > 0 && (
+        <div className="exam-recent">
+          {recent.map((x) => {
+            const last = exams.filter((e) => e.cc === x).at(-1)!
+            return (
+              <div key={x} className="exam-row">
+                <span>{countryFlag(map, x)} {countryLabel(map, x)}</span>
+                <ExamHistory cc={x} />
+                <span className="muted small">última: {last.ok}/{last.n}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }

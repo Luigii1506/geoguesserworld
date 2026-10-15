@@ -12,6 +12,8 @@ import { entityMetrics, kindCount, kindLabel } from '../lib/geoFormat'
 import { Img } from './Img'
 import { SaveButton } from './study/SaveButton'
 import { hintItem, placeItem } from '../lib/study/items'
+import { useStudy } from '../lib/study/store'
+import { retrievability } from '../lib/study/fsrs'
 
 export function CountryChip({ code, map, to }: { code: string; map: Map<string, CountryRow>; to?: string }) {
   return (
@@ -363,6 +365,10 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
   const sources = cluster.sources.map((s) => SOURCE_NAMES[s] ?? s)
   const scope = useContext(HintScope)
   const saveable = scope.cc ? hintItem(cluster, hints, lang, scope.cc, scope.catName) : null
+  // si ya la estudias: cuánto la recuerdas hoy
+  const study = useStudy()
+  const card = study.cards[`t:${cluster.id}`]?.state
+  const known = card ? retrievability(card) : 0
 
   return (
     <article className="hint">
@@ -401,6 +407,7 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
       )}
       <div className="hint-meta">
         {saveable && <SaveButton item={saveable} />}
+        {known > 0 && <span className={`hint-known ${known >= 0.85 ? 'good' : known >= 0.6 ? 'mid' : 'low'}`} title="Probabilidad de que hoy la recuerdes (FSRS)">la recuerdas al {Math.round(known * 100)} %</span>}
         {topic && <button className="link topic-link" onClick={topic.onClick}>{topic.label} →</button>}
         {cluster.usefulness === 3 && !topic && <Usefulness value={3} />}
         {cluster.region && <span>{cluster.region}</span>}

@@ -21,7 +21,7 @@ const str = (v, max) => (typeof v === 'string' && v.length > 0 && v.length <= ma
 const num = (v) => (Number.isFinite(v) ? Math.round(v) : null)
 
 /** Lo que manda el cliente, validado y recortado (una fila mal formada se descarta). */
-function clean(body) {
+export function clean(body) {
   const list = (x) => (Array.isArray(x) ? x.slice(0, MAX) : [])
   const decks = list(body.decks)
     .map((d) => ({ id: str(d?.id, LIMITS.key), name: str(d?.name, LIMITS.name), updated_at: num(d?.updated_at), deleted: Boolean(d?.deleted) }))

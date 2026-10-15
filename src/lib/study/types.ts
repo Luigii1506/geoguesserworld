@@ -9,9 +9,10 @@
 //
 // Claves (las de pistas y fotos de Entrenar son las de siempre: el progreso continúa):
 //   t:<grupo>      pista              f:<imagen>   foto              g:<entidad>   lugar
+//   d:<a>_<b>      gemelos (dos países que se confunden, del duelo de ambos)
 //   p:<grupo>:<i>  foto de Entrenar   l:<id>       lugar de Entrenar
 
-export type ItemKind = 'hint' | 'photo' | 'place'
+export type ItemKind = 'hint' | 'photo' | 'place' | 'twins'
 
 export interface HintData {
   /** texto en el idioma en que se guardó */
@@ -23,6 +24,8 @@ export interface HintData {
   region?: string
   u?: number
   img?: string
+  /** vista de Street View del ejemplo (panorámica, coordenadas, ángulo, inclinación, campo de visión) */
+  sv?: { p: string | null; lat: number; lng: number; h: number; t: number; f: number }
 }
 
 export interface PhotoData {
@@ -46,7 +49,14 @@ export interface PlaceData {
   descr?: string
 }
 
-export type ItemData = HintData | PhotoData | PlaceData
+/** dos países gemelos (códigos en orden alfabético, como el duelo) */
+export interface TwinsData {
+  a: string
+  b: string
+  headline?: string
+}
+
+export type ItemData = HintData | PhotoData | PlaceData | TwinsData
 
 export interface StudyItem {
   key: string
@@ -108,6 +118,18 @@ export interface Settings {
   newPerDay: number
   /** mazo al que van los guardados sueltos */
   lastDeck?: string
+  /** exámenes hechos (los últimos) */
+  exams?: ExamResult[]
+}
+
+/** Un examen: preguntas al azar de un país, cronometradas, sin tocar el repaso. */
+export interface ExamResult {
+  cc: string
+  at: number
+  ok: number
+  n: number
+  /** segundos en total */
+  secs: number
 }
 
 export const DEFAULT_SETTINGS: Settings = { goal: 20, newPerDay: 15 }

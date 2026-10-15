@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { SaveButton } from '../components/study/SaveButton'
+import { twinsItem } from '../lib/study/items'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type CountryRow, useCountryMap, useJson } from '../lib/data'
 import { imageSrc } from '../lib/images'
@@ -229,6 +231,10 @@ export default function Duel() {
             {duel.headline}
           </blockquote>
         )}
+        <div className="dd-save">
+          <SaveButton item={twinsItem(A.code, B.code, duel.headline)} />
+          <span className="muted small">Guárdalo y repásalo foto contra foto en Mi estudio.</span>
+        </div>
         <ol className="dd-plan">
           <li><button onClick={() => jump('diferencias')}><span>1</span>Mira las {diffs.length} diferencias</button></li>
           <li><button onClick={() => jump('quiz')}><span>2</span>Ponte a prueba</button></li>

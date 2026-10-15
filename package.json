@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
     "pipeline": "node --disable-warning=ExperimentalWarning pipeline/run.mjs",
     "release": "npm run build && npm run pipeline -- geo publish"
   },
@@ -38,11 +39,14 @@
     "@types/react-dom": "^18.3.1",
     "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^21.0.1",
     "sharp": "^0.33.5",
     "topojson-server": "^3.0.1",
     "topojson-simplify": "^3.0.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^3.2.7"
   }
 }

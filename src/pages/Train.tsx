@@ -16,6 +16,7 @@ import WikiImage from '../components/WikiImage'
 import { imageSrc } from '../lib/images'
 
 const StudyHub = lazy(() => import('../components/study/StudyHub'))
+const ExamSession = lazy(() => import('../components/study/ExamSession'))
 
 // Entrenar tiene dos partes:
 //   · Mi estudio: lo que has guardado con ☆, en tus mazos (components/study/StudyHub.tsx)
@@ -50,6 +51,14 @@ export default function Train() {
   // con algo guardado se abre Mi estudio; ?pais= (desde una guía) y ?modo=libre, la práctica libre
   const free = params.get('modo') === 'libre' || params.has('pais') || (s.ready && savedItems(s).length === 0 && !params.has('mazo'))
   const go = (libre: boolean) => setParams(libre ? { modo: 'libre' } : {}, { replace: true })
+  const exam = params.get('examen')
+  if (exam) {
+    return (
+      <Suspense fallback={<div className="empty">Preparando el examen…</div>}>
+        <ExamSession cc={exam} onExit={() => setParams({}, { replace: true })} />
+      </Suspense>
+    )
+  }
   return (
     <div>
       <div className="train-tabs seg" role="tablist" aria-label="Entrenar">
@@ -60,7 +69,7 @@ export default function Train() {
         <Practice />
       ) : (
         <Suspense fallback={<div className="empty">Cargando tu estudio…</div>}>
-          <StudyHub initialDeck={params.get('mazo') ?? undefined} />
+          <StudyHub initialDeck={params.get('mazo') ?? undefined} initialCountry={params.get('estudiar') ?? undefined} />
         </Suspense>
       )}
     </div>

@@ -46,6 +46,14 @@ export default function Layout() {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
+  // la app instalada muestra en su icono cuántas tarjetas tocan (donde el sistema lo permite)
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
+    if (!study.ready) return
+    if (due > 0) nav.setAppBadge?.(due).catch(() => {})
+    else nav.clearAppBadge?.().catch(() => {})
+  }, [due, study.ready])
+
   return (
     <>
       <header className="topbar">

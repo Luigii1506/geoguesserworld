@@ -12,7 +12,10 @@ export function hintItem(cluster: Cluster, hints: Map<number, Hint>, lang: Lang,
   const canonical = hints.get(cluster.canonical_id)
   if (!canonical) return null
   const text = hintText(canonical, lang).trim()
-  const img = cluster.images?.[0] ?? cluster.members.map((id) => hints.get(id)).find((h) => h?.images.length)?.images[0]
+  const members = cluster.members.map((id) => hints.get(id))
+  const img = cluster.images?.[0] ?? members.find((h) => h?.images.length)?.images[0]
+  // la vista de Street View del ejemplo, si alguna fuente la trae (con panorámica, mejor)
+  const sv = members.find((h) => h?.sv?.p)?.sv ?? members.find((h) => h?.sv)?.sv
   if (!text && !img) return null
   return {
     key: itemKey.hint(cluster.id),
@@ -21,6 +24,7 @@ export function hintItem(cluster: Cluster, hints: Map<number, Hint>, lang: Lang,
     data: {
       text: text.slice(0, 1200), lang, cat: cluster.category, catName: catName?.(cluster.category),
       sub: cluster.subcategory ?? undefined, region: cluster.region ?? undefined, u: cluster.usefulness ?? undefined, img,
+      sv: sv ?? undefined,
     },
   }
 }
@@ -46,4 +50,10 @@ export function placeItem(c: Pick<GeoCard, 'id' | 'kind' | 'name' | 'cc' | 'lat'
       bbox: c.bbox ?? undefined, thumb: c.thumb, descr: c.descr?.slice(0, 300),
     },
   }
+}
+
+/** Dos países gemelos: se estudian con las fotos de su duelo, lado a lado. */
+export function twinsItem(a: string, b: string, headline?: string | null): NewItem {
+  const [x, y] = [a, b].sort()
+  return { key: itemKey.twins(x, y), kind: 'twins', cc: null, data: { a: x, b: y, headline: headline ?? undefined } }
 }

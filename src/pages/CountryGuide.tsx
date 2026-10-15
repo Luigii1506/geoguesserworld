@@ -9,6 +9,7 @@ import { imageSrc } from '../lib/images'
 import { countryStreetView } from '../data/capitals'
 import { HintItem, HintScope, Lightbox, Loading, MissingData, ObjectProfile, PhotoTiles } from '../components/ui'
 import { StudyAllButton } from '../components/study/SaveButton'
+import { CountryProgress } from '../components/study/CountryProgress'
 import { hintItem } from '../lib/study/items'
 import type { NewItem } from '../lib/study/store'
 import { HintList, Variants, mainObjects, variantObjects } from '../components/guide'
@@ -475,6 +476,7 @@ export default function CountryGuide() {
             <button className="btn" onClick={() => jump('reconocer')}>Empezar por lo esencial</button>
             {streetView && <a href={streetView} target="_blank" rel="noreferrer" className="btn btn-quiet">Street View</a>}
           </div>
+          <CountryProgress cc={country.code} name={name} />
           <div className="cg-facts">
             <span><em>Conduce</em> por la {country.driving_side === 'left' ? 'izquierda' : 'derecha'}</span>
             {country.languages.length > 0 && <span><em>Idioma</em> {country.languages.slice(0, 3).join(', ')}</span>}

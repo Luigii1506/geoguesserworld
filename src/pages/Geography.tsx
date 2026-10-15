@@ -12,6 +12,9 @@ import { Omnibox } from '../components/geo/Omnibox'
 import { Strip } from '../components/geo/Strip'
 import { Sheet } from '../components/geo/Sheet'
 import { Img } from '../components/Img'
+import { StudyAllButton } from '../components/study/SaveButton'
+import { placeItem } from '../lib/study/items'
+import { KIND_PLURAL } from '../lib/geo'
 
 const WorldMap = lazy(() => import('../components/WorldMap'))
 
@@ -425,6 +428,15 @@ export default function Geography() {
                     {sorts.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select>
                 </label>
+                {list.items.length > 0 && (
+                  <StudyAllButton
+                    key={list.key}
+                    className="btn btn-sm"
+                    label={`Estudiar ${Math.min(list.items.length, 100)}`}
+                    deckName={[sub ? KIND_PLURAL[sub] ?? kindLabel(sub) : family?.label ?? 'Lugares', cc ? countries.get(cc)?.name : cont ? REGION_ES[cont] ?? cont : ''].filter(Boolean).join(' · ').replace(/^./, (x) => x.toUpperCase())}
+                    items={() => list.items.slice(0, 100).map((c) => placeItem(c))}
+                  />
+                )}
                 <div className="seg seg-sm geo-view">
                   <button className={view === 'galeria' ? 'on' : ''} onClick={() => setMany({ vista: '' })}>Galería</button>
                   <button className={view === 'ranking' ? 'on' : ''} onClick={() => setMany({ vista: 'ranking' })}>Ranking</button>

@@ -116,3 +116,78 @@ export function accuracy(s: StudyState, days = 30, now = Date.now()): { ok: numb
   }
   return { ok, n }
 }
+
+/** Repasos por día de las últimas semanas (para el calendario de actividad), de lunes a domingo. */
+export function calendar(s: StudyState, weeks = 20, now = new Date()): { day: string; n: number }[][] {
+  const counts = new Map<string, number>()
+  for (const r of s.reviews) counts.set(dayOf(r.at), (counts.get(dayOf(r.at)) ?? 0) + 1)
+  // empieza en el lunes de hace `weeks - 1` semanas
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - (weeks - 1) * 7)
+  const out: { day: string; n: number }[][] = []
+  for (let w = 0; w < weeks; w++) {
+    const col: { day: string; n: number }[] = []
+    for (let d = 0; d < 7; d++) {
+      const x = new Date(start)
+      x.setDate(start.getDate() + w * 7 + d)
+      const day = dayOf(x.getTime())
+      col.push({ day, n: x > now ? -1 : counts.get(day) ?? 0 })
+    }
+    out.push(col)
+  }
+  return out
+}
+
+export interface TopicMastery {
+  cat: string
+  name: string
+  score: number
+  cards: number
+}
+
+/** Dominio por tema (bolardos, matrículas…) de lo guardado y estudiado. */
+export function masteryByTopic(s: StudyState, now = new Date()): TopicMastery[] {
+  const acc = new Map<string, { name: string; sum: number; n: number }>()
+  for (const item of savedItems(s)) {
+    if (item.kind !== 'hint' && item.kind !== 'photo') continue
+    const d = item.data as { cat: string; catName?: string }
+    for (const c of cardsOf(item)) {
+      const st = s.cards[c.key]?.state
+      if (isNew(st)) continue
+      const a = acc.get(d.cat) ?? { name: d.catName ?? d.cat, sum: 0, n: 0 }
+      a.sum += retrievability(st, now)
+      a.n++
+      acc.set(d.cat, a)
+    }
+  }
+  return [...acc].map(([cat, a]) => ({ cat, name: a.name, score: a.sum / a.n, cards: a.n })).sort((x, y) => x.score - y.score)
+}
+
+const median = (xs: number[]) => {
+  if (!xs.length) return 0
+  const a = [...xs].sort((x, y) => x - y)
+  const m = a.length >> 1
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2
+}
+
+/**
+ * Velocidad al reconocer: mediana del tiempo de los aciertos (en partida, reconocer rápido
+ * es lo que da puntos) y los países en los que más tardas.
+ */
+export function speed(s: StudyState, days = 30, now = Date.now()): { median: number; n: number; slow: { cc: string; median: number; n: number }[] } {
+  const from = now - days * 86_400_000
+  const all: number[] = []
+  const byCc = new Map<string, number[]>()
+  for (const r of s.reviews) {
+    // aciertos de "¿de qué país es?" (con país y respuesta igual), sin pausas largas
+    if (r.at < from || !r.ms || r.ms > 120_000 || !r.cc || r.answer !== r.cc || r.rating < 2) continue
+    all.push(r.ms)
+    byCc.set(r.cc, [...(byCc.get(r.cc) ?? []), r.ms])
+  }
+  const slow = [...byCc]
+    .filter(([, xs]) => xs.length >= 3)
+    .map(([cc, xs]) => ({ cc, median: median(xs), n: xs.length }))
+    .sort((a, b) => b.median - a.median)
+    .slice(0, 5)
+  return { median: median(all), n: all.length, slow }
+}

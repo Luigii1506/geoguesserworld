@@ -5,7 +5,7 @@ import { DataError, Lightbox, Loading } from '../components/ui'
 import { useGeo } from '../lib/geo'
 import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
 import { Img } from '../components/Img'
-import { SaveButton } from '../components/study/SaveButton'
+import { SaveButton, StudyAllButton } from '../components/study/SaveButton'
 import { photoItem } from '../lib/study/items'
 
 // Explorador de fotos: una categoría, todos los países, con las imágenes de
@@ -15,6 +15,8 @@ import { photoItem } from '../lib/study/items'
 const SOURCE_BY_LETTER: Record<string, string> = { p: 'plonkit', g: 'geometas', h: 'geohints', t: 'geotips', l: 'learnablemeta', o: 'openguessr' }
 const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
 const PAGE = 60
+// fotos que se guardan de una vez con «Estudiar estas fotos»
+const STUDY_MAX = 120
 
 export default function Visual() {
   const meta = useGeo('gg-visual-meta', guides.visualMeta)
@@ -114,7 +116,40 @@ export default function Visual() {
         </div>
       )}
 
-      <p className="muted small" style={{ marginBottom: '1rem' }}>{total.toLocaleString('es')} fotos</p>
+      <div className="row" style={{ marginBottom: '1rem' }}>
+        <p className="muted small" style={{ margin: 0 }}>{total.toLocaleString('es')} fotos</p>
+        {total > 0 && (
+          <StudyAllButton
+            key={key}
+            className="btn btn-sm"
+            label={`Estudiar ${Math.min(total, STUDY_MAX)} de estas fotos`}
+            deckName={[catName(cat), sub && sub.replace(/_/g, ' '), pais ? label(pais) : region ? REGION_ES[region] : ''].filter(Boolean).join(' · ')}
+            items={async () => {
+              const want = Math.min(total, STUDY_MAX)
+              // con un país, sus fotos (las de pantalla y las páginas siguientes)
+              if (pais) {
+                const all = [...items]
+                while (all.length < want) {
+                  const r = await guides.visual({ ...query, offset: all.length, limit: 60 })
+                  if (!r.items.length) break
+                  all.push(...r.items)
+                }
+                return all.slice(0, want).filter((it) => it.c).map((it) => photoItem(it, catName))
+              }
+              // sin país: unas pocas de cada uno (la lista va por orden alfabético de país, así que
+              // se piden por país: los que más fotos tienen de este tema)
+              const per = 3
+              const ccs = Object.entries(facets?.countries ?? {}).sort((x, y) => y[1] - x[1]).slice(0, Math.ceil(want / per)).map(([c]) => c)
+              const out: VisualItem[] = []
+              for (let i = 0; i < ccs.length; i += 8) {
+                const pages = await Promise.all(ccs.slice(i, i + 8).map((c) => guides.visual({ ...query, cc: c, offset: 0, limit: per }).catch(() => null)))
+                for (const r of pages) if (r) out.push(...r.items)
+              }
+              return out.slice(0, want).filter((it) => it.c).map((it) => photoItem(it, catName))
+            }}
+          />
+        )}
+      </div>
 
       <div className={`photo-grid ${loading && !items.length ? 'is-stale' : ''}`}>
         {items.map((it, i) => (
