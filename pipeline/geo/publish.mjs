@@ -52,8 +52,25 @@ export async function exportSql(file = path.join(WORK, 'd1.sql')) {
     }
     // los esquemas de xref que solo usa el pipeline para unir fuentes no se publican
     const where = t === 'entity_xref' ? ` WHERE scheme IN (${PUBLIC_XREF.map(lit).join(', ')})` : ''
+    const pk = t === 'entity_fts' ? [] : db.prepare(`PRAGMA table_info(${t})`).all().filter((c) => c.pk > 0).map((c) => c.name)
     for (const r of db.prepare(`SELECT ${cols.join(', ')} FROM ${t}${where}`).iterate()) {
-      const v = `(${cols.map((c) => lit(r[c])).join(',')})`
+      let v = `(${cols.map((c) => lit(r[c])).join(',')})`
+      // una fila más grande que el límite de D1 (una respuesta precalculada enorme): se inserta
+      // con sus textos largos recortados y se completa con UPDATE … || '…' por trozos
+      if (Buffer.byteLength(v) > MAX_STATEMENT && pk.length) {
+        await flush()
+        const big = cols.filter((c) => typeof r[c] === 'string' && Buffer.byteLength(r[c]) > 20_000)
+        const first = { ...r }
+        for (const c of big) first[c] = ''
+        await write(`${head}(${cols.map((c) => lit(first[c])).join(',')});\n`)
+        const cond = pk.map((k) => `${k} = ${lit(r[k])}`).join(' AND ')
+        for (const c of big) {
+          const text = r[c]
+          for (let i = 0; i < text.length; i += 20_000) await write(`UPDATE ${t} SET ${c} = ${c} || ${lit(text.slice(i, i + 20_000))} WHERE ${cond};\n`)
+        }
+        rows++
+        continue
+      }
       const bytes = Buffer.byteLength(v) + 1
       if (size + bytes > MAX_STATEMENT) await flush()
       batch.push(v)

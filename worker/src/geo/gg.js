@@ -26,42 +26,51 @@ export async function visualMeta(db) {
   return { categories: cats ? JSON.parse(cats.value) : [], counts: Object.fromEntries(counts.map((r) => [r.k, r.n])) }
 }
 
+/** Total, subcategorías y países con fotos de una categoría (se precalcula: gg/visual/facets/<cat>). */
+export async function visualFacets(db, cat) {
+  const [total, subs, countries] = await Promise.all([
+    db.first('SELECT COUNT(*) AS n FROM gg_photo WHERE k = ?', [cat]),
+    db.all('SELECT sk, COUNT(*) AS n FROM gg_photo WHERE k = ? AND sk IS NOT NULL GROUP BY sk ORDER BY n DESC', [cat]),
+    db.all('SELECT cc, COUNT(*) AS n FROM gg_photo WHERE k = ? AND cc IS NOT NULL GROUP BY cc', [cat]),
+  ])
+  return { total: total?.n ?? 0, subs: subs.map((r) => [r.sk, r.n]), countries: Object.fromEntries(countries.map((r) => [r.cc, r.n])) }
+}
+
+async function cachedJson(db, path, compute) {
+  const row = await db.first('SELECT body FROM api_cache WHERE path = ?', [path]).catch(() => null)
+  return row ? JSON.parse(row.body) : compute()
+}
+
 /** Fotos de una categoría con filtros de subcategoría, país, continente y fuente. */
 export async function visualList(db, p) {
   const cat = p.get('cat')
   if (!cat) throw new HttpError(400, 'falta cat')
   const limit = int(p.get('limit'), 60, 200)
   const offset = int(p.get('offset'), 0)
-  const base = ['ph.k = ?']
+  const where = ['ph.k = ?']
   const params = [cat]
   const sub = p.get('sub')
   const cc = p.get('cc')
   const src = p.get('src')
   const cont = p.get('continent')
-  const extra = []
-  const extraParams = []
-  if (sub) (extra.push('ph.sk = ?'), extraParams.push(sub))
-  if (cc) (extra.push('ph.cc = ?'), extraParams.push(cc))
-  if (src) (extra.push('ph.src = ?'), extraParams.push(src))
-  if (cont && CONTINENTS.has(cont)) (extra.push('ph.cc IN (SELECT cc FROM country WHERE continent = ?)'), extraParams.push(cont))
-  const where = `WHERE ${[...base, ...extra].join(' AND ')}`
-  const all = [...params, ...extraParams]
-  const [rows, total] = await Promise.all([
-    db.all(`SELECT ph.id, ph.cc, ph.place, ph.src, ph.k, ph.sk, ph.text, ph.img, ph.link FROM gg_photo ph ${where} ORDER BY ph.sort_name, ph.id LIMIT ? OFFSET ?`, [...all, limit, offset]),
-    db.first(`SELECT COUNT(*) AS n FROM gg_photo ph ${where}`, all),
+  if (sub) (where.push('ph.sk = ?'), params.push(sub))
+  if (cc) (where.push('ph.cc = ?'), params.push(cc))
+  if (src) (where.push('ph.src = ?'), params.push(src))
+  if (cont && CONTINENTS.has(cont)) (where.push('ph.cc IN (SELECT cc FROM country WHERE continent = ?)'), params.push(cont))
+  const filtered = where.length > 1
+  const sql = `WHERE ${where.join(' AND ')}`
+  // la página recorre el índice (k, sort_name) y se detiene en `limit`
+  const [rows, facets] = await Promise.all([
+    db.all(`SELECT ph.id, ph.cc, ph.place, ph.src, ph.k, ph.sk, ph.text, ph.img, ph.link FROM gg_photo ph ${sql} ORDER BY ph.sort_name, ph.id LIMIT ? OFFSET ?`, [...params, limit, offset]),
+    cachedJson(db, `gg/visual/facets/${cat}`, () => visualFacets(db, cat)),
   ])
+  // con filtros, el total se cuenta (son pocas filas); sin ellos, el precalculado
+  const total = filtered ? (await db.first(`SELECT COUNT(*) AS n FROM gg_photo ph ${sql}`, params))?.n ?? 0 : facets.total
   const out = {
-    total: total?.n ?? 0, offset, limit,
+    total, offset, limit,
     items: rows.map((r) => ({ id: r.id, c: r.cc, n: r.place ?? undefined, s: r.src, k: r.k, sk: r.sk ?? undefined, t: r.text ?? '', i: r.img, l: r.link ?? '' })),
   }
-  // facetas (solo en la primera página): subcategorías de la categoría y países con fotos
-  if (offset === 0) {
-    const [subs, countries] = await Promise.all([
-      db.all('SELECT sk, COUNT(*) AS n FROM gg_photo WHERE k = ? AND sk IS NOT NULL GROUP BY sk ORDER BY n DESC', [cat]),
-      db.all('SELECT cc, COUNT(*) AS n FROM gg_photo WHERE k = ? AND cc IS NOT NULL GROUP BY cc', [cat]),
-    ])
-    out.facets = { subs: subs.map((r) => [r.sk, r.n]), countries: Object.fromEntries(countries.map((r) => [r.cc, r.n])) }
-  }
+  if (offset === 0) out.facets = { subs: facets.subs, countries: facets.countries }
   return out
 }
 
@@ -74,18 +83,10 @@ const shuffle = (a) => {
   return x
 }
 
-/**
- * Sesión de Entrenar. Elige igual que antes hacía la app con quiz.json entero:
- * primero lo que toca repasar (`due`), luego lo nuevo (no está en `seen`), lo más
- * útil antes y, si no es un solo país, como mucho 2 preguntas por país.
- * Con size = 0 solo cuenta (preguntas posibles y cuántas tocan repasar).
- */
-export async function quizSession(db, body) {
+/** Filtros de una sesión → WHERE sobre gg_quiz. */
+function quizScope(body) {
   const mode = ['mix', 'text', 'photo'].includes(body.mode) ? body.mode : 'mix'
   const scope = String(body.scope ?? '')
-  const size = Math.min(int(String(body.size ?? 10), 10), 50)
-  const due = new Set(Array.isArray(body.due) ? body.due.map(String) : [])
-  const seen = new Set(Array.isArray(body.seen) ? body.seen.map(String) : [])
   const where = []
   const params = []
   const kinds = mode === 'mix' ? ['text', 'photo'] : [mode]
@@ -96,36 +97,83 @@ export async function quizSession(db, body) {
   if (body.category) (where.push('q.k = ?'), params.push(String(body.category)))
   // "solo determinantes" filtra las pistas de texto; las fotos se mantienen
   if (body.essential) where.push("(q.kind = 'photo' OR q.u = 3)")
-  const pool = await db.all(`SELECT q.key, q.kind, q.cc, q.u FROM gg_quiz q WHERE ${where.join(' AND ')}`, params)
-  const dueInPool = pool.filter((r) => due.has(r.key))
-  const out = { pool: pool.length, due: dueInPool.length, items: [], pools: {} }
+  return { mode, scope, where: where.join(' AND '), params }
+}
+
+/** Clave del recuento precalculado (sin categoría): gg/quiz/count/<modo>|<ámbito>|<determinantes>. */
+export const quizCountPath = (body) => `gg/quiz/count/${quizScope(body).mode}|${String(body.scope ?? '')}|${body.essential ? 1 : 0}`
+
+/** Cuántas preguntas cumplen los filtros (se precalcula para los ámbitos sin categoría). */
+export async function quizCount(db, body) {
+  const q = quizScope(body)
+  return (await db.first(`SELECT COUNT(*) AS n FROM gg_quiz q WHERE ${q.where}`, q.params))?.n ?? 0
+}
+
+/** Países posibles como distractor: con pistas de texto, o con fotos del mismo objeto (se precalcula). */
+export async function quizPools(db) {
+  const [text, photo] = await Promise.all([
+    db.all("SELECT DISTINCT cc FROM gg_quiz WHERE kind = 'text'"),
+    db.all("SELECT k, COALESCE(sk, '') AS sk, group_concat(DISTINCT cc) AS ccs FROM gg_quiz WHERE kind = 'photo' GROUP BY k, COALESCE(sk, '')"),
+  ])
+  return { text: text.map((r) => r.cc), ...Object.fromEntries(photo.map((r) => [`${r.k}|${r.sk}`, r.ccs.split(',')])) }
+}
+
+/**
+ * Sesión de Entrenar. Elige como antes hacía la app con quiz.json entero: primero lo que
+ * toca repasar (`due`), luego lo nuevo (no está en `seen`), lo más útil antes y, si no es
+ * un solo país, como mucho 2 preguntas por país. Lo nuevo sale de una ventana aleatoria
+ * del índice (columna r): se leen unas cientos de filas, no el banco entero.
+ * Con size = 0 solo cuenta (preguntas posibles y cuántas tocan repasar).
+ */
+export async function quizSession(db, body) {
+  const q = quizScope(body)
+  const size = Math.min(int(String(body.size ?? 10), 10), 50)
+  const dueList = (Array.isArray(body.due) ? body.due.map(String) : []).filter((k) => k.startsWith('t:') || k.startsWith('p:')).slice(0, 2000)
+  const seen = new Set(Array.isArray(body.seen) ? body.seen.map(String) : [])
+
+  // pendientes de repaso que entran en los filtros (por clave: pocas filas)
+  const dueRows = []
+  for (let i = 0; i < dueList.length; i += 90) {
+    const chunk = dueList.slice(i, i + 90)
+    dueRows.push(...(await db.all(`SELECT q.key, q.kind, q.cc, q.u FROM gg_quiz q WHERE q.key IN (${placeholders(chunk.length)}) AND ${q.where}`, [...chunk, ...q.params])))
+  }
+  const pool = body.category
+    ? await quizCount(db, body)
+    : await cachedJson(db, quizCountPath(body), () => quizCount(db, body))
+  const out = { pool, due: dueRows.length, items: [], pools: {} }
   if (!size) return out
 
-  const fresh = shuffle(pool.filter((r) => !seen.has(r.key))).sort((a, b) => (b.kind === 'text' ? b.u ?? 2 : 2) - (a.kind === 'text' ? a.u ?? 2 : 2))
+  // nuevas: una ventana aleatoria (con vuelta al principio si se acaba)
+  const want = Math.max(300, size * 30)
+  const start = Math.random()
+  let window = await db.all(`SELECT q.key, q.kind, q.cc, q.u FROM gg_quiz q WHERE ${q.where} AND q.r >= ? ORDER BY q.r LIMIT ?`, [...q.params, start, want])
+  if (window.length < want) window = [...window, ...(await db.all(`SELECT q.key, q.kind, q.cc, q.u FROM gg_quiz q WHERE ${q.where} AND q.r < ? ORDER BY q.r LIMIT ?`, [...q.params, start, want - window.length]))]
+  const fresh = shuffle(window.filter((r) => !seen.has(r.key))).sort((a, b) => (b.kind === 'text' ? b.u ?? 2 : 2) - (a.kind === 'text' ? a.u ?? 2 : 2))
+
   const chosen = []
   const perCountry = new Map()
-  for (const r of [...shuffle(dueInPool), ...fresh]) {
+  const taken = new Set()
+  for (const r of [...shuffle(dueRows), ...fresh]) {
     if (chosen.length >= size) break
+    if (taken.has(r.key)) continue
     const n = perCountry.get(r.cc) ?? 0
-    if (!scope.startsWith('c:') && n >= 2) continue
+    if (!q.scope.startsWith('c:') && n >= 2) continue
     perCountry.set(r.cc, n + 1)
+    taken.add(r.key)
     chosen.push(r)
   }
   if (!chosen.length) return out
-  const rows = await db.all(`SELECT key, kind, cc, k, sk, data FROM gg_quiz WHERE key IN (${placeholders(chosen.length)})`, chosen.map((r) => r.key))
+  const [rows, allPools] = await Promise.all([
+    db.all(`SELECT key, kind, cc, k, sk, data FROM gg_quiz WHERE key IN (${placeholders(chosen.length)})`, chosen.map((r) => r.key)),
+    cachedJson(db, 'gg/quiz/pools', () => quizPools(db)),
+  ])
   const byKey = new Map(rows.map((r) => [r.key, r]))
-  // distractores: en texto, cualquier país con pistas; en foto, solo los que tienen ese mismo objeto
-  const poolKeys = new Set()
-  for (const r of rows) poolKeys.add(r.kind === 'photo' ? `${r.k}|${r.sk ?? ''}` : 'text')
-  for (const pk of poolKeys) {
-    const list = pk === 'text'
-      ? await db.all("SELECT DISTINCT cc FROM gg_quiz WHERE kind = 'text'")
-      : await db.all("SELECT DISTINCT cc FROM gg_quiz WHERE kind = 'photo' AND k = ? AND COALESCE(sk, '') = ?", pk.split('|'))
-    out.pools[pk] = list.map((x) => x.cc)
-  }
+  const dueSet = new Set(dueRows.map((r) => r.key))
   out.items = chosen.map((c) => {
     const r = byKey.get(c.key)
-    return { key: r.key, kind: r.kind, cc: r.cc, due: due.has(r.key), pool: r.kind === 'photo' ? `${r.k}|${r.sk ?? ''}` : 'text', data: JSON.parse(r.data) }
+    const pool = r.kind === 'photo' ? `${r.k}|${r.sk ?? ''}` : 'text'
+    out.pools[pool] ??= allPools[pool] ?? allPools.text
+    return { key: r.key, kind: r.kind, cc: r.cc, due: dueSet.has(r.key), pool, data: JSON.parse(r.data) }
   })
   return out
 }

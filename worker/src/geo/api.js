@@ -133,7 +133,40 @@ async function withFacts(db, rows) {
   return rows.map((r) => card(r, facts.get(r.id)))
 }
 
-const SORTS = { rank: 'e.rank DESC', name: 'e.name COLLATE NOCASE ASC', hints: 'e.hints DESC, e.rank DESC', fame: 'e.fame DESC', random: 'random()' }
+// órdenes que no son un dato: por nombre; los demás (y "rank", la importancia), por el índice entity_sort
+const SORTS = { name: 'e.name COLLATE NOCASE ASC' }
+
+/**
+ * Cuántos valores tiene cada orden en entity_sort (precalculado al construir la base).
+ * Se guarda el valor, no la promesa: en un Worker no se puede reutilizar la E/S de otra petición.
+ */
+let sortCounts = null
+async function sortCount(db, key) {
+  if (!sortCounts) {
+    const r = await db.first("SELECT value FROM meta WHERE key = 'sort_counts'").catch(() => null)
+    sortCounts = r ? JSON.parse(r.value) : {}
+  }
+  return sortCounts[key] ?? 0
+}
+
+/**
+ * Filas de una página ordenada por un dato (o por importancia, "rank"). Dos caminos:
+ *   · recorrer el índice ordenado y quedarse con las que cumplen los filtros hasta llenar
+ *     la página: ~ (offset + limit) × N / total filas leídas (bueno si el filtro es amplio)
+ *   · filtrar primero y ordenar lo que queda: ~ total filas (bueno si el filtro es selectivo)
+ * Se elige el más barato con el total ya conocido; CROSS JOIN fija el orden de lectura.
+ */
+async function sortedRows(db, { where, params, key, asc, limit, offset, total }) {
+  const n = await sortCount(db, key)
+  const and = where ? `${where} AND` : 'WHERE'
+  const indexFirst = total === Infinity || (total > 0 && ((offset + limit) * n) / total < total)
+  const sql = indexFirst
+    ? `SELECT ${CARD_COLS}, s.value AS sort_value FROM entity_sort s CROSS JOIN entity e ON e.id = s.entity_id
+       ${and} s.key = ? ORDER BY s.value ${asc ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`
+    : `SELECT ${CARD_COLS}, s.value AS sort_value FROM entity e CROSS JOIN entity_sort s ON s.entity_id = e.id AND s.key = ?
+       ${where} ORDER BY s.value ${asc ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`
+  return db.all(sql, indexFirst ? [...params, key, limit, offset] : [key, ...params, limit, offset])
+}
 
 export async function listEntities(db, p) {
   const limit = int(p.get('limit'), 36, MAX_LIMIT)
@@ -142,37 +175,77 @@ export async function listEntities(db, p) {
   const asc = p.get('order') === 'asc'
   const { where, params } = filters(p)
   const and = where ? `${where} AND` : 'WHERE'
+  if (!SORTS[sort] && sort !== 'random' && !SAFE_KEY.test(sort)) throw new HttpError(400, 'orden no válido')
+
+  // al azar (Sorpréndeme): un punto cualquiera entre los ~400 más importantes que cumplen
+  // los filtros, sin contar ni ordenar todo
+  if (sort === 'random') {
+    let rows = await sortedRows(db, { where, params, key: 'rank', asc: false, limit, offset: Math.floor(Math.random() * 400), total: Infinity })
+    if (!rows.length) rows = await sortedRows(db, { where, params, key: 'rank', asc: false, limit, offset: 0, total: Infinity })
+    return { total: rows.length, offset: 0, limit, items: await withFacts(db, rows) }
+  }
+
+  // total y facetas: precalculados si se puede (una fila); al momento solo si alguien los
+  // pide (facets=1 o total=1): un carrusel de 12 no necesita contar 170.000 lugares
+  const wantTotal = p.get('facets') === '1' || p.get('total') === '1'
+  const sum = (await cachedSummary(db, p)) ?? (wantTotal ? await computeSummary(db, p) : null)
+  const total = sum?.total ?? null
+  const f = sum?.facets
   let rows
-  let total
   if (SORTS[sort]) {
-    ;[rows, total] = await Promise.all([
-      db.all(`SELECT ${CARD_COLS} FROM entity e ${where} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`, [...params, limit, offset]),
-      db.first(`SELECT COUNT(*) AS n FROM entity e ${where}`, params),
-    ])
+    rows = await db.all(`SELECT ${CARD_COLS} FROM entity e ${where} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`, [...params, limit, offset])
   } else {
-    if (!SAFE_KEY.test(sort)) throw new HttpError(400, 'orden no válido')
-    // por dato (índice entity_sort, en su orden: sin desempate, que impediría usar el índice);
-    // los que no tienen el dato van al final, por importancia
-    total = await db.first(`SELECT COUNT(*) AS n FROM entity e ${where}`, params)
-    rows = await db.all(
-      `SELECT ${CARD_COLS}, s.value AS sort_value FROM entity_sort s JOIN entity e ON e.id = s.entity_id
-       ${and} s.key = ? ORDER BY s.value ${asc ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`,
-      [...params, sort, limit, offset],
-    )
-    if (rows.length < limit) {
-      // solo al llegar al final de los que tienen el dato hace falta saber cuántos son
-      const nv = (await db.first(`SELECT COUNT(*) AS n FROM entity_sort s JOIN entity e ON e.id = s.entity_id ${and} s.key = ?`, [...params, sort]))?.n ?? 0
+    // sin total conocido se recorre el índice (lo normal en listas cortas y amplias)
+    rows = total === null || offset < total ? await sortedRows(db, { where, params, key: sort, asc, limit, offset, total: total ?? Infinity }) : []
+    // los que no tienen el dato, al final por importancia (solo al llegar a esa parte)
+    if (rows.length < limit && sort !== 'rank') {
+      // cuántos tienen el dato: si caben en la primera página, son los que vinieron
+      const nv = offset === 0 ? rows.length
+        : (await db.first(`SELECT COUNT(*) AS n FROM entity e CROSS JOIN entity_sort s ON s.entity_id = e.id AND s.key = ? ${where}`, [sort, ...params]))?.n ?? 0
       const rest = await db.all(
-        `SELECT ${CARD_COLS} FROM entity e ${and} e.id NOT IN (SELECT entity_id FROM entity_sort WHERE key = ?)
+        `SELECT ${CARD_COLS} FROM entity e ${and} NOT EXISTS (SELECT 1 FROM entity_sort x WHERE x.key = ? AND x.entity_id = e.id)
          ORDER BY e.rank DESC LIMIT ? OFFSET ?`,
         [...params, sort, limit - rows.length, Math.max(0, offset - nv)],
       )
       rows = [...rows, ...rest]
     }
   }
-  const out = { total: total?.n ?? 0, offset, limit, items: await withFacts(db, rows) }
-  if (p.get('facets') === '1') out.facets = await facets(db, p)
+  const out = { total, offset, limit, items: await withFacts(db, rows) }
+  if (p.get('facets') === '1') out.facets = f
   return out
+}
+
+// ── contadores precalculados (tabla facet_cache, los genera `geo build`) ──
+// Las combinaciones habituales (lugar × tipo) se leen de una fila en lugar de
+// recorrer cientos de miles: D1 cobra por filas leídas.
+const SUMMARY_PARAMS = ['cc', 'continent', 'family', 'kind']
+const NEUTRAL_PARAMS = new Set(['sort', 'order', 'offset', 'limit', 'facets', 'k', 't'])
+
+/** Clave de la combinación en facet_cache, o null si la consulta lleva otros filtros. */
+export function summaryKey(p) {
+  for (const [k] of p) if (!SUMMARY_PARAMS.includes(k) && !NEUTRAL_PARAMS.has(k)) return null
+  if ((p.get('cc') ?? '').includes(',') || (p.get('kind') ?? '').includes(',')) return null
+  return SUMMARY_PARAMS.map((k) => `${k}=${p.get(k) ?? ''}`).join('|')
+}
+
+/** Total y facetas calculados al momento. */
+export async function computeSummary(db, p) {
+  const { where, params } = filters(p)
+  const [total, f] = await Promise.all([db.first(`SELECT COUNT(*) AS n FROM entity e ${where}`, params), facets(db, p)])
+  return { total: total?.n ?? 0, facets: f }
+}
+
+/** Total y facetas precalculados (una fila), o null si la combinación no lo está. */
+async function cachedSummary(db, p) {
+  const key = summaryKey(p)
+  if (!key) return null
+  const row = await db.first('SELECT data FROM facet_cache WHERE key = ?', [key]).catch(() => null)
+  return row ? JSON.parse(row.data) : null
+}
+
+/** Total y facetas: precalculados si se puede; si no, al momento. */
+async function summary(db, p) {
+  return (await cachedSummary(db, p)) ?? computeSummary(db, p)
 }
 
 /** Cuántos hay de cada tipo y de cada etiqueta con los filtros actuales. */
@@ -202,10 +275,12 @@ export async function search(db, p) {
   const match = ftsQuery(q)
   if (!match) return { items: [] }
   const kinds = list(p.get('kind'))
+  // el índice de texto está en orden de importancia (rowid): las 200 primeras coincidencias
+  // ya son las más conocidas, sin leer todas
   const rows = await db.all(
-    `SELECT ${CARD_COLS} FROM entity_fts f JOIN entity e ON e.id = f.entity_id
-     WHERE entity_fts MATCH ? ${kinds.length ? `AND e.kind IN (${placeholders(kinds.length)})` : ''}
-     ORDER BY e.rank DESC LIMIT 200`,
+    `SELECT ${CARD_COLS} FROM (SELECT rowid AS r, entity_id FROM entity_fts WHERE entity_fts MATCH ? ORDER BY rowid LIMIT ${kinds.length ? 1000 : 200}) f
+     JOIN entity e ON e.id = f.entity_id ${kinds.length ? `WHERE e.kind IN (${placeholders(kinds.length)})` : ''}
+     ORDER BY f.r LIMIT 200`,
     [match, ...kinds],
   )
   // el nombre que empieza igual que la búsqueda, primero
@@ -253,10 +328,7 @@ export async function getCountry(db, cc) {
   if (!c) throw new HttpError(404, 'país desconocido')
   const [entity, counts, regions, assets, terrain, highest] = await Promise.all([
     getEntity(db, c.entity_id),
-    db.all(
-      `SELECT e.kind, COUNT(*) AS n FROM entity_country ec JOIN entity e ON e.id = ec.entity_id WHERE ec.cc = ? GROUP BY e.kind`,
-      [cc],
-    ),
+    summary(db, new URLSearchParams({ cc })),
     db.all(`SELECT ${CARD_COLS} FROM entity e JOIN entity_tag t ON t.entity_id = e.id AND t.tag = 'admin1' WHERE e.cc = ? ORDER BY e.name`, [cc]),
     db.all('SELECT a.layer_id, a.path, a.bbox, a.width, a.height, a.hash FROM asset a WHERE a.cc = ?', [cc]),
     // repartos del terreno de todas sus regiones (relieve, vegetación, clima, cultivos)
@@ -284,7 +356,8 @@ export async function getCountry(db, cc) {
   return {
     cc, name: c.name, name_en: c.name_en ?? undefined, continent: c.continent ?? undefined, flag: c.flag ?? undefined, guide: !!c.guide,
     entity,
-    counts: Object.fromEntries(counts.map((r) => [r.kind, r.n])),
+    // los tipos de lugar (precalculados) y sus estados o regiones
+    counts: { ...counts.facets.kinds, ...(regions.length ? { admin1: regions.length } : {}) },
     regions: regionCards.map((r) => ({ ...r, terrain: byRegion.get(r.id) })),
     highest: highest.length ? (await withFacts(db, highest))[0] : undefined,
     // con ?v=<huella>: el navegador guarda cada capa para siempre y la vuelve a pedir solo si cambia

@@ -151,6 +151,20 @@ CREATE TABLE IF NOT EXISTS asset (
   PRIMARY KEY (cc, layer_id)
 ) WITHOUT ROWID;
 
+-- respuestas enteras de la API que no dependen de quién pregunta (ficha de cada país,
+-- meta, facetas de fotos, grupos de distractores…), precalculadas por `geo build`
+CREATE TABLE IF NOT EXISTS api_cache (
+  path  TEXT PRIMARY KEY,        -- geo/country/mx · geo/meta · gg/visual/facets/bollards…
+  body  TEXT NOT NULL
+) WITHOUT ROWID;
+
+-- total y facetas de las combinaciones habituales de /list (lugar × tipo), precalculados
+-- por `geo build` (pipeline/geo/facets.mjs): D1 cobra por filas leídas
+CREATE TABLE IF NOT EXISTS facet_cache (
+  key   TEXT PRIMARY KEY,        -- cc=mx|continent=|family=agua|kind=
+  data  TEXT NOT NULL            -- { total, facets: { kinds, tags, hints } }
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -184,7 +198,10 @@ CREATE TABLE IF NOT EXISTS gg_quiz (
   k     TEXT NOT NULL,
   sk    TEXT,
   u     INTEGER,                  -- utilidad (pistas de texto)
+  r     REAL NOT NULL,            -- número aleatorio fijo: elegir preguntas nuevas lee una ventana, no el banco
   data  TEXT NOT NULL             -- la pregunta en JSON (texto en es/en, imagen, región…)
 ) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS gg_quiz_r ON gg_quiz(r);
+CREATE INDEX IF NOT EXISTS gg_quiz_cc_r ON gg_quiz(cc, r);
+CREATE INDEX IF NOT EXISTS gg_quiz_k_r ON gg_quiz(k, r);
 CREATE INDEX IF NOT EXISTS gg_quiz_scope ON gg_quiz(kind, k, cc);
-CREATE INDEX IF NOT EXISTS gg_quiz_cc ON gg_quiz(cc);

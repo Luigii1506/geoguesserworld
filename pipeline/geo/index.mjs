@@ -15,6 +15,7 @@ import { ROOT } from '../lib/paths.mjs'
 
 const SCHEMA_FILE = path.join(ROOT, 'geo', 'schema.sql')
 import { derive } from './derive.mjs'
+import { precomputeAll, precomputeGuides } from './precompute.mjs'
 import * as naturalearth from './sources/naturalearth.mjs'
 import * as wikidata from './sources/wikidata.mjs'
 import * as gvp from './sources/gvp.mjs'
@@ -70,6 +71,11 @@ async function runBuild(ctx) {
   }
   await derive(store, ctx)
   store.meta('built_at', new Date().toISOString())
+  // índices derivados (FTS, ordenación, etiquetas) antes de los contadores, que los usan
+  store.finalize()
+  store.db.exec('BEGIN')
+  await precomputeAll(store, ctx)
+  store.db.exec('COMMIT')
   const counts = store.db.prepare('SELECT kind, COUNT(*) n FROM entity GROUP BY kind ORDER BY n DESC').all()
   const file = store.finish()
   ctx.log(`✓ ${file} en ${((Date.now() - t0) / 1000).toFixed(0)}s`)
@@ -85,12 +91,22 @@ export async function geo(staging, args, opts) {
   if (step === 'build') return runBuild(ctx)
   if (step === 'layers') return atlas.runLayers(rest, ctx)
   if (step === 'publish') return publish(rest)
+  // precálculos de la API: recalcular sobre la base actual
+  if (step === 'precompute') {
+    const store = openStore()
+    store.db.exec(readFileSync(SCHEMA_FILE, 'utf8'))
+    store.db.exec('BEGIN')
+    await precomputeAll(store, ctx)
+    store.db.exec('COMMIT')
+    return store.close()
+  }
   // guías: aplicar a la base actual sin reconstruirla (tras `export`)
   if (step === 'guides') {
     const store = openStore()
     store.db.exec(readFileSync(SCHEMA_FILE, 'utf8'))
     store.db.exec('BEGIN')
     await guides.ingest(store, { ...ctx, log: (...a) => console.log('[guides]', ...a) })
+    await precomputeGuides(store, ctx)
     store.db.exec('COMMIT')
     store.db.exec('ANALYZE')
     return store.close()

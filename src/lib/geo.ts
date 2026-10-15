@@ -80,6 +80,7 @@ export interface GeoEntity extends Omit<GeoCard, 'facts' | 'value'> {
 }
 
 export interface GeoList {
+  /** null si no se pidió (facets/total) y no estaba precalculado */
   total: number
   offset: number
   limit: number

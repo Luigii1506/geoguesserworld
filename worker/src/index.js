@@ -27,11 +27,24 @@ function same(a, b) {
   return diff === 0
 }
 
-/** Adaptador D1 → interfaz de los manejadores ({ all, first }). */
-const d1 = (db) => ({
-  all: async (sql, params = []) => (await db.prepare(sql).bind(...params).all()).results,
-  first: async (sql, params = []) => (await db.prepare(sql).bind(...params).first()) ?? null,
-})
+/**
+ * Adaptador D1 → interfaz de los manejadores ({ all, first }). Suma las filas que
+ * lee cada consulta (D1 cobra por ellas): sale en la cabecera x-d1-rows-read.
+ */
+const d1 = (db) => {
+  const stats = { rows: 0, queries: 0 }
+  const run = async (sql, params) => {
+    const r = await db.prepare(sql).bind(...params).all()
+    stats.rows += r.meta?.rows_read ?? 0
+    stats.queries++
+    return r.results
+  }
+  return {
+    stats,
+    all: (sql, params = []) => run(sql, params),
+    first: async (sql, params = []) => (await run(sql, params))[0] ?? null,
+  }
+}
 
 /** Respuesta en caché del borde (la clave de acceso no forma parte de la clave de caché). */
 async function cached(request, url, ctx, make) {
@@ -46,14 +59,13 @@ async function cached(request, url, ctx, make) {
   return response
 }
 
-async function fromBucket(env, key, type, request, cacheControl = 'private, max-age=31536000, immutable') {
+async function fromBucket(env, key, type, request, cacheControl = 'public, max-age=31536000, immutable') {
   const object = await env.IMAGES.get(key)
   if (!object) return new Response('Not found', { status: 404 })
   const headers = new Headers()
   object.writeHttpMetadata(headers)
   headers.set('etag', object.httpEtag)
   headers.set('content-type', type)
-  // privada: el navegador la guarda, pero ningún proxy compartido
   headers.set('cache-control', cacheControl)
   headers.set('access-control-allow-origin', '*')
   return new Response(request.method === 'HEAD' ? null : object.body, { headers })
@@ -76,24 +88,29 @@ export default {
     if (isImage || isAsset) {
       const type = isImage ? 'image/webp' : TYPES[url.pathname.split('.').pop()]
       // con huella en el nombre (x.3f2a9c1b.json) no cambian nunca; el manifiesto, cada minuto
-      const cache = url.pathname === '/community/manifest.json' ? 'private, max-age=60'
-        : /\.[0-9a-f]{8}\.json$/.test(url.pathname) || url.searchParams.has('v') || isImage ? 'private, max-age=31536000, immutable' : 'private, max-age=3600'
+      // public: también se guarda en el borde de Cloudflare (la clave se comprueba antes de mirar la caché)
+      const cache = url.pathname === '/community/manifest.json' ? 'public, max-age=60'
+        : /\.[0-9a-f]{8}\.json$/.test(url.pathname) || url.searchParams.has('v') || isImage ? 'public, max-age=31536000, immutable' : 'public, max-age=3600'
       return cached(request, url, ctx, () => fromBucket(env, url.pathname.slice(1), type, request, cache))
     }
 
     if (!env.GEO) return Response.json({ error: 'sin base de geografía' }, { status: 503 })
+    const db = d1(env.GEO)
+    const usage = () => ({ 'x-d1-rows-read': String(db.stats.rows), 'x-d1-queries': String(db.stats.queries), 'access-control-expose-headers': 'x-d1-rows-read, x-d1-queries' })
     if (isPost) {
-      const { status, body } = await handleApi(d1(env.GEO), url, await request.text())
-      return Response.json(body, { status, headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' } })
+      const { status, body } = await handleApi(db, url, await request.text())
+      return Response.json(body, { status, headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store', ...usage() } })
     }
     return cached(request, url, ctx, async () => {
-      const { status, body } = await handleApi(d1(env.GEO), url)
+      const { status, body } = await handleApi(db, url)
       return Response.json(body, {
         status,
         headers: {
+          ...usage(),
           'access-control-allow-origin': '*',
-          // los datos cambian solo al publicar: una hora en el navegador y en el borde
-          'cache-control': status === 200 ? 'private, max-age=3600' : 'no-store',
+          // los datos cambian solo al publicar: una hora en el navegador y en el borde (compartida:
+          // dos personas que piden lo mismo leen D1 una sola vez)
+          'cache-control': status === 200 ? 'public, max-age=3600' : 'no-store',
         },
       })
     })

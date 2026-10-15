@@ -65,6 +65,7 @@ export function openStore({ fresh = false, file = GEO_DB } = {}) {
     hint: db.prepare('INSERT OR IGNORE INTO entity_hint (entity_id, hint_id, cc) VALUES (?, ?, ?)'),
   }
 
+  let finalized = false
   const store = {
     db,
     file: target,
@@ -188,9 +189,15 @@ export function openStore({ fresh = false, file = GEO_DB } = {}) {
       db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, typeof value === 'string' ? value : JSON.stringify(value))
     },
 
-    /** Índices derivados (países, búsqueda, importancia) y cierre. */
-    finish({ publish = true } = {}) {
+    /** Índices derivados (países, búsqueda, importancia, ordenación); se puede llamar antes de finish. */
+    finalize() {
       finalize(db)
+      finalized = true
+    },
+
+    /** Índices derivados (si faltan) y cierre. */
+    finish({ publish = true } = {}) {
+      if (!finalized) finalize(db)
       db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
       db.close()
       if (fresh && publish) {
@@ -277,14 +284,24 @@ function finalize(db) {
     SELECT key, entity_id, MAX(value) FROM fact
     WHERE value IS NOT NULL AND key != 'population' AND instr(key, ':') = 0 GROUP BY key, entity_id`)
   db.exec(`INSERT INTO entity_sort (key, entity_id, value) SELECT 'hints', id, hints FROM entity WHERE hints > 0`)
+  // la importancia también: ordenar por ella recorre el índice y se detiene al llenar la página
+  db.exec(`INSERT INTO entity_sort (key, entity_id, value) SELECT 'rank', id, rank FROM entity`)
+  // cuántos valores tiene cada orden (para que la API elija el camino más barato)
+  db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('sort_counts', ?)").run(
+    JSON.stringify(Object.fromEntries(db.prepare('SELECT key, COUNT(*) n FROM entity_sort GROUP BY key').all().map((r) => [r.key, r.n]))),
+  )
   db.exec(`UPDATE country SET places = (SELECT COUNT(*) FROM entity_country ec JOIN entity e ON e.id = ec.entity_id
     WHERE ec.cc = country.cc AND e.kind NOT IN ('country', 'admin1'))`)
   db.exec('DELETE FROM entity_tag')
   const tag = db.prepare('INSERT OR IGNORE INTO entity_tag (tag, entity_id) VALUES (?, ?)')
   for (const r of db.prepare('SELECT id, tags FROM entity WHERE tags IS NOT NULL').all()) for (const t of r.tags.split(',')) if (t) tag.run(t, r.id)
   db.exec('DELETE FROM entity_fts')
-  db.exec(`INSERT INTO entity_fts (entity_id, names)
-    SELECT entity_id, group_concat(name, ' | ') FROM entity_name GROUP BY entity_id`)
+  // en orden de importancia: FTS5 devuelve por rowid, así que las primeras coincidencias
+  // ya son las más conocidas y la búsqueda no necesita leerlas todas
+  db.exec(`INSERT INTO entity_fts (rowid, entity_id, names)
+    SELECT ROW_NUMBER() OVER (ORDER BY e.rank DESC, e.id), n.entity_id, n.names
+    FROM (SELECT entity_id, group_concat(name, ' | ') names FROM entity_name GROUP BY entity_id) n
+    JOIN entity e ON e.id = n.entity_id`)
   db.exec('COMMIT')
   db.exec("INSERT INTO entity_fts(entity_fts) VALUES ('optimize')")
   db.exec('ANALYZE')

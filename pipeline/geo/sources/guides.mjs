@@ -34,9 +34,14 @@ export async function ingest(store, ctx) {
   visual.items.forEach((it, i) => {
     photo.run(i + 1, it.c ?? null, it.n ?? null, it.s, it.k, it.sk ?? null, it.t ?? null, it.i, it.l ?? null, (it.c ? name.get(it.c) : null) ?? it.n ?? '—')
   })
-  const q = db.prepare('INSERT OR REPLACE INTO gg_quiz (key, kind, cc, k, sk, u, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
-  for (const t of quiz.texts) q.run(`t:${t.id}`, 'text', t.c, t.k, t.sk ?? null, t.u ?? null, JSON.stringify(t))
-  for (const p of quiz.photos) q.run(`p:${p.id}:${p.i}`, 'photo', p.c, p.k, p.sk ?? null, null, JSON.stringify(p))
+  // el banco puede venir de una versión anterior del esquema (sin la columna r)
+  if (!db.prepare('PRAGMA table_info(gg_quiz)').all().some((c) => c.name === 'r')) {
+    db.exec('DROP TABLE gg_quiz')
+    db.exec(readFileSync(path.join(ROOT, 'geo', 'schema.sql'), 'utf8'))
+  }
+  const q = db.prepare('INSERT OR REPLACE INTO gg_quiz (key, kind, cc, k, sk, u, r, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  for (const t of quiz.texts) q.run(`t:${t.id}`, 'text', t.c, t.k, t.sk ?? null, t.u ?? null, Math.random(), JSON.stringify(t))
+  for (const p of quiz.photos) q.run(`p:${p.id}:${p.i}`, 'photo', p.c, p.k, p.sk ?? null, null, Math.random(), JSON.stringify(p))
   store.meta('guides_categories', visual.categories)
   ctx.log(`✓ ${visual.items.length} fotos del explorador · ${quiz.texts.length + quiz.photos.length} preguntas`)
 }
