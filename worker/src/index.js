@@ -104,6 +104,7 @@ export default {
       try {
         return await handleApi(db, url, body)
       } catch (e) {
+        console.error(`[api] ${url.pathname}: ${e?.message ?? e}`)
         const quota = /limit|7500/i.test(String(e?.message))
         return { status: 503, body: { error: quota ? 'cuota diaria de D1 agotada' : 'error de la base de datos' } }
       }
