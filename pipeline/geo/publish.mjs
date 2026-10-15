@@ -1,17 +1,17 @@
 // Publicación de la base geográfica:
-//   npm run pipeline -- geo publish        D1 + R2
+//   npm run pipeline -- geo publish        todo: D1, R2 (capas y guías) y el Worker
 //   npm run pipeline -- geo publish d1     solo la base (D1 "geomastery-geo")
 //   npm run pipeline -- geo publish r2     solo los archivos de las capas (R2 atlas/…)
 //   npm run pipeline -- geo publish community   las guías (R2 community/…, con huella y manifiesto)
+//   npm run pipeline -- geo publish worker      despliega worker/ (wrangler deploy)
 //   añade --dry para generar el SQL sin enviarlo y --full para recargar D1 entera
 //
-// D1 incremental: se guarda una copia de lo publicado (data/geo-work/d1-published.db) y la
-// siguiente publicación envía solo las filas nuevas, cambiadas o borradas (EXCEPT tabla a
-// tabla). Con otro esquema, publicación completa.
-//
-// D1: se genera data/geo-work/d1.sql (esquema + datos en INSERT de < 90 KB, el
-// límite de D1 por sentencia es 100 KB) y se carga con wrangler. Las tablas se
-// recrean enteras: la base es de solo lectura y se reconstruye en cada versión.
+// D1: se genera data/geo-work/d1.sql y se carga con wrangler (sentencias de < 90 KB; el
+// límite de D1 es 100 KB). Es incremental: se guarda una copia de lo publicado
+// (data/geo-work/d1-published.db) y se envían solo las filas nuevas (INSERT), las que
+// cambiaron (UPDATE de las columnas que cambian: D1 cobra cada índice que se toca) y las
+// borradas (DELETE). Con otro esquema, o con --full, se borran y recrean todas las tablas
+// (~3,3 M filas: más que el límite gratis de escrituras de un día).
 // R2: solo se suben los archivos cuyo hash cambió desde la última publicación.
 
 import { DatabaseSync } from 'node:sqlite'
@@ -35,12 +35,20 @@ const PUBLIC_XREF = ['wd', 'gn', 'gvp', 'gmba', 'iso', 'iso3', 'ucdb', 'hylak', 
 const lit = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' || typeof v === 'bigint' ? String(v) : `'${String(v).replace(/'/g, "''").replace(/\r/g, "'||char(13)||'")}'`)
 
 const SNAPSHOT = path.join(WORK, 'd1-published.db')
+const CHUNK = 20_000  // textos más largos: se escriben por trozos
 
 /** Escritor de SQL para D1: INSERT por lotes de < 90 KB y filas enormes completadas por trozos. */
 function sqlWriter(file) {
   const out = createWriteStream(file)
   const write = (s) => new Promise((res) => (out.write(s) ? res() : out.once('drain', res)))
   let rows = 0
+  const where = (pk, r) => pk.map((k) => `${k} = ${lit(r[k])}`).join(' AND ')
+  const bigCols = (r, cols) => cols.filter((c) => typeof r[c] === 'string' && Buffer.byteLength(r[c]) > CHUNK)
+  /** Completa los textos largos de una fila (ya escritos vacíos) con UPDATE … || '…' por trozos. */
+  const append = async (t, pk, r, big) => {
+    for (const c of big)
+      for (let i = 0; i < r[c].length; i += CHUNK) await write(`UPDATE ${t} SET ${c} = ${c} || ${lit(r[c].slice(i, i + CHUNK))} WHERE ${where(pk, r)};\n`)
+  }
   return {
     write,
     get rows() {
@@ -63,13 +71,11 @@ function sqlWriter(file) {
         // con sus textos largos vacíos y se completa con UPDATE … || '…' por trozos
         if (Buffer.byteLength(v) > MAX_STATEMENT && pk.length) {
           await flush()
-          const big = cols.filter((c) => typeof r[c] === 'string' && Buffer.byteLength(r[c]) > 20_000)
+          const big = bigCols(r, cols)
           const first = { ...r }
           for (const c of big) first[c] = ''
           await write(`${head}(${cols.map((c) => lit(first[c])).join(',')});\n`)
-          const cond = pk.map((k) => `${k} = ${lit(r[k])}`).join(' AND ')
-          for (const c of big)
-            for (let i = 0; i < r[c].length; i += 20_000) await write(`UPDATE ${t} SET ${c} = ${c} || ${lit(r[c].slice(i, i + 20_000))} WHERE ${cond};\n`)
+          await append(t, pk, r, big)
           rows++
           continue
         }
@@ -80,6 +86,17 @@ function sqlWriter(file) {
         rows++
       }
       await flush()
+    },
+    /**
+     * Actualiza solo las columnas que cambiaron de una fila que ya existe. D1 cuenta como
+     * escritura cada índice que toca: un INSERT OR REPLACE reescribe la fila y todos sus
+     * índices (6 escrituras en entity); un UPDATE de columnas sin índice, una.
+     */
+    async update(t, pk, r, changed) {
+      const big = bigCols(r, changed)
+      await write(`UPDATE ${t} SET ${changed.map((c) => `${c} = ${big.includes(c) ? "''" : lit(r[c])}`).join(', ')} WHERE ${where(pk, r)};\n`)
+      await append(t, pk, r, big)
+      rows++
     },
     /** Borra las filas de `t` cuyas claves vienen en el iterador. */
     async remove(t, pk, iterator) {
@@ -143,10 +160,17 @@ export async function exportSql(file = path.join(WORK, 'd1.sql'), { full = false
   if (incremental) {
     for (const { t, cols, pk, where } of tables) {
       const list = cols.join(', ')
-      const oldWhere = where.replace('WHERE', 'WHERE')
-      await w.insert(t, cols, db.prepare(`SELECT ${list} FROM main.${t} ${where} EXCEPT SELECT ${list} FROM old.${t} ${oldWhere}`).iterate(), { replace: true, pk })
       const keys = pk.join(', ')
-      await w.remove(t, pk, db.prepare(`SELECT ${keys} FROM old.${t} ${oldWhere} EXCEPT SELECT ${keys} FROM main.${t} ${where}`).iterate())
+      // filas distintas: las que ya existían se actualizan columna a columna; las nuevas se insertan
+      const before = db.prepare(`SELECT ${list} FROM old.${t} WHERE ${pk.map((k) => `${k} = ?`).join(' AND ')}`)
+      const fresh = []
+      for (const r of db.prepare(`SELECT ${list} FROM main.${t} ${where} EXCEPT SELECT ${list} FROM old.${t} ${where}`).iterate()) {
+        const o = before.get(...pk.map((k) => r[k]))
+        if (o) await w.update(t, pk, r, cols.filter((c) => r[c] !== o[c]))
+        else fresh.push(r)
+      }
+      await w.insert(t, cols, fresh, { replace: true, pk })
+      await w.remove(t, pk, db.prepare(`SELECT ${keys} FROM old.${t} ${where} EXCEPT SELECT ${keys} FROM main.${t} ${where}`).iterate())
     }
   } else {
     for (const { t } of tables) await w.write(`DROP TABLE IF EXISTS ${t};\n`)
@@ -312,5 +336,8 @@ export async function publish(args) {
   if (!what.length || what.includes('r2')) await publishR2(dry)
   // el manifiesto lleva la versión de D1: si se publica D1, también las guías (solo sube lo que cambió)
   if (!what.length || what.includes('community') || what.includes('d1')) await publishCommunity(dry)
-  if (!dry) console.log('[publish] para servirlo: cd worker && npx wrangler deploy')
+  if (!dry && (!what.length || what.includes('worker'))) {
+    console.log('[publish] Worker: desplegando…')
+    wrangler(['deploy'], { inherit: true })
+  }
 }

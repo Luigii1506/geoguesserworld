@@ -2,6 +2,8 @@ name = "geoguesser-images"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
+# sin URLs de vista previa por versión: solo la de producción
+preview_urls = false
 
 [[r2_buckets]]
 binding = "IMAGES"

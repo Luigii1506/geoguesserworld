@@ -438,6 +438,12 @@ a.chip:hover, button.chip:hover { border-color: var(--ink-3); color: var(--ink);
 /* genéricos */
 .grid { display: grid; gap: 1rem; }
 .grid-2 { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+/* tabla que en el móvil se apila: una ficha por fila */
+@media (max-width: 640px) {
+  .table-stack thead { display: none; }
+  .table-stack tr { display: grid; gap: 0.2rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); }
+  .table-stack td { display: block; padding: 0; border: 0; }
+}
 .source-card { display: grid; gap: 0.6rem; align-content: start; }
 .source-card dl { display: grid; gap: 0.5rem; margin: 0; font-size: 0.88rem; }
 .source-card dt { font-size: 0.74rem; color: var(--ink-3); }

@@ -1,17 +1,46 @@
 import { SOURCES } from '../data/sources'
 import { useMeta } from '../lib/data'
+import { geo, useGeo } from '../lib/geo'
+
+// Qué aporta cada fuente de la base geográfica (licencia y cita vienen de la tabla source, vía geo/meta)
+const GEO_ROLE: Record<string, string> = {
+  countries: 'países: nombres, capitales, idiomas, monedas',
+  naturalearth: 'fronteras, regiones, llanuras, mesetas, desiertos y mares',
+  wikidata: 'identidad, nombres en varios idiomas y coordenadas',
+  'wikidata-enrich': 'fotos, población, altitud y otros datos de cada lugar',
+  wikipedia: 'resúmenes de cada lugar',
+  gvp: 'volcanes: tipo, estado y última erupción',
+  geonames: 'ciudades, pueblos y accidentes geográficos',
+  ghsl: 'áreas urbanas y su población',
+  gmba: 'cordilleras y sierras',
+  hydrolakes: 'lagos y su superficie',
+  hydrorivers: 'ríos en los mapas de cada país',
+  resolve: 'ecorregiones y biomas',
+  etopo: 'relieve y formas del terreno',
+  worldcover: 'cobertura del suelo: bosque, cultivo, ciudad…',
+  koppen: 'climas',
+  mapspam: 'dónde se cultiva cada producto',
+  atlas: 'mapas por país hechos a partir de las capas anteriores',
+}
+// las pistas y guías de la comunidad ya salen en las secciones de abajo
+const COMMUNITY = new Set(['hints', 'guides'])
 
 export default function Sources() {
   const meta = useMeta()
+  const geoMeta = useGeo('meta', geo.meta)
   const t = meta?.totals
+  const order = Object.keys(GEO_ROLE)
+  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length)
+  const geoSources = (geoMeta.data?.sources ?? []).filter((s) => !COMMUNITY.has(s.id)).sort((a, b) => rank(a.id) - rank(b.id))
 
   return (
     <div>
       <header className="page-head">
         <h1>Fuentes y licencias</h1>
         <p className="lead">
-          GeoMastery reúne seis fuentes de la comunidad: las extrae, quita lo repetido, revisa cada pista y la traduce. Cada
-          pista conserva su fuente y un enlace al original.
+          Las pistas vienen de seis guías de la comunidad: se extraen, se quita lo repetido, se revisa cada pista y se
+          traduce, y cada una conserva su fuente y un enlace al original. La geografía (lugares, relieve, climas, cultivos…)
+          sale de bases de datos abiertas.
         </p>
       </header>
 
@@ -25,15 +54,36 @@ export default function Sources() {
       )}
 
       <p className="note" style={{ marginBottom: '2.4rem' }}>
-        Solo para uso personal. Ninguna de estas fuentes publica una licencia abierta para su contenido y muchas imágenes
-        son capturas de Google Street View. Los datos viven en tu máquina (<code>data/</code> y <code>public/community/</code>,
-        fuera de git) y las imágenes se cargan desde los servidores originales. Las fotos de lugares vienen de Wikipedia
-        (CC BY-SA) y los datos de países de mledoze/countries (ODbL) y Wikidata (CC0).
+        Uso personal, con permiso de cada guía de la comunidad. Muchas de sus imágenes son capturas de Google Street View.
+        Los textos de Wikipedia se publican bajo CC BY-SA 4.0 y cada ficha enlaza a su artículo.
       </p>
+
+      {geoSources.length > 0 && (
+        <section className="filter-group" style={{ marginBottom: '2.4rem' }}>
+          <h2>Datos geográficos</h2>
+          <div className="table-wrap">
+            <table className="table table-stack">
+              <thead><tr><th>Fuente</th><th>Aporta</th><th>Licencia y cita</th></tr></thead>
+              <tbody>
+                {geoSources.map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      {s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.name}</a> : s.name}
+                      {s.version && <span className="muted small"> · {s.version}</span>}
+                    </td>
+                    <td>{GEO_ROLE[s.id] ?? ''}</td>
+                    <td className="muted small">{s.license}<br />{s.attribution}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {meta && (
         <section className="filter-group" style={{ marginBottom: '2.4rem' }}>
-          <h2>Cómo se extrae cada fuente</h2>
+          <h2>Cómo se extrae cada guía</h2>
           <div className="table-wrap">
             <table className="table">
               <thead><tr><th>Fuente</th><th>Método</th><th>Licencia</th></tr></thead>
@@ -52,7 +102,7 @@ export default function Sources() {
       )}
 
       <section className="filter-group">
-        <h2>Qué aporta cada sitio</h2>
+        <h2>Qué aporta cada guía</h2>
         <div className="grid grid-2">
           {SOURCES.map((s) => (
             <div key={s.id} className="panel source-card">

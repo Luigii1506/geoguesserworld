@@ -203,7 +203,8 @@ npm run pipeline -- geo build                      # data/geo.db (~5 min)
 npm run pipeline -- geo download wikidata-enrich   # fama, fotos y artículos (caché)
 npm run pipeline -- geo layers                     # repartos e imágenes por país (largo)
 npm run pipeline -- export                         # las pistas enlazan sus lugares
-npm run pipeline -- geo publish                    # D1 + R2 (luego: cd worker && npx wrangler deploy)
+npm run pipeline -- geo publish                    # D1 (incremental) + R2 + Worker
+npm run release                                    # lo anterior y el build de la app
 ```
 
 ## Repetición espaciada

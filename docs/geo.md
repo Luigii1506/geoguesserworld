@@ -72,7 +72,7 @@ npm run pipeline -- geo download wikidata-enrich       fama, fotos, artículos y
 npm run pipeline -- geo download wikipedia             resúmenes de los artículos nuevos (caché)
 npm run pipeline -- geo download resolve               nombres en español de las ecorregiones (DeepSeek, caché)
 npm run pipeline -- geo layers [capa…] [--countries mx,ch] [--no-stats] [--no-render]
-npm run pipeline -- geo publish [d1|r2] [--dry] [--full]   D1 + R2; luego: cd worker && npx wrangler deploy
+npm run pipeline -- geo publish [d1|r2|community|worker] [--dry] [--full]   sin nada: todo
 ```
 
 Orden tras añadir una fuente: `geo build` → `geo download wikidata-enrich` →
@@ -156,8 +156,9 @@ leer el progreso en el servidor en lugar de recibirlo en el cuerpo.
 
 D1 gratis permite 100 000 filas escritas al día y la base tiene ~3,3 M. Tras cada
 publicación se guarda una copia de lo publicado (`data/geo-work/d1-published.db`); la
-siguiente compara tabla a tabla (`EXCEPT`) y envía solo las filas nuevas o cambiadas
-(`INSERT OR REPLACE`) y las borradas (`DELETE`). Si cambia el esquema, o con `--full`,
+siguiente compara tabla a tabla (`EXCEPT`) y envía solo las filas nuevas (`INSERT`), las
+cambiadas (`UPDATE` de las columnas que cambian: D1 cobra cada índice que toca, y un
+`INSERT OR REPLACE` en `entity` cuesta 6 escrituras) y las borradas (`DELETE`). Si cambia el esquema, o con `--full`,
 se borra y recarga todo. Con `--dry` se ve cuántas filas iría a escribir.
 
 ### Caché en el navegador (PWA)
