@@ -39,9 +39,11 @@ type Props = {
   legend?: React.ReactNode
   /** patrones SVG propios (p. ej. rayas de dos colores); reciben el zoom para mantener su tamaño en pantalla */
   defs?: (k: number) => React.ReactNode
+  /** al tocar un país, en lugar de abrir su guía (todos los países se pueden elegir) */
+  onSelect?: (c: CountryRow) => void
 }
 
-export default function WorldMap({ countries, highlight, paint, card, legend, defs }: Props) {
+export default function WorldMap({ countries, highlight, paint, card, legend, defs, onSelect }: Props) {
   const navigate = useNavigate()
   const svgRef = useRef<SVGSVGElement>(null)
   const gRef = useRef<SVGGElement>(null)
@@ -86,7 +88,7 @@ export default function WorldMap({ countries, highlight, paint, card, legend, de
   const dots = useMemo(() => {
     const drawn = new Set(shapes.filter((s) => s.country).map((s) => s.country!.code))
     return countries
-      .filter((c) => c.groups > 0 && c.lat != null && c.lng != null && (!drawn.has(c.code) || (c.area ?? Infinity) < SMALL_KM2))
+      .filter((c) => (onSelect || c.groups > 0) && c.lat != null && c.lng != null && (!drawn.has(c.code) || (c.area ?? Infinity) < SMALL_KM2))
       .map((c) => ({ c, p: projection([c.lng!, c.lat!]), drawn: drawn.has(c.code) }))
       .filter((d): d is { c: CountryRow; p: [number, number]; drawn: boolean } => Boolean(d.p))
   }, [countries, shapes])
@@ -135,7 +137,11 @@ export default function WorldMap({ countries, highlight, paint, card, legend, de
     const box = svgRef.current?.getBoundingClientRect()
     if (box) setHover({ c, x: e.clientX - box.left, y: e.clientY - box.top, flip: e.clientX - box.left > box.width * 0.62 })
   }
-  const open = (c?: CountryRow) => c && c.groups > 0 && navigate(`/pais/${c.code}`)
+  const open = (c?: CountryRow) => {
+    if (!c) return
+    if (onSelect) onSelect(c)
+    else if (c.groups > 0) navigate(`/pais/${c.code}`)
+  }
   const dim = (c?: CountryRow) => Boolean(highlight && (!c || !highlight.has(c.code)))
 
   return (
@@ -168,7 +174,7 @@ export default function WorldMap({ countries, highlight, paint, card, legend, de
             <path d={graticule} className="wm-graticule" />
             {shapes.map((s, i) => {
               const c = s.country
-              const guided = c && c.groups > 0
+              const guided = c && (c.groups > 0 || (onSelect && paint))
               const fill = paint
                 ? (c && paint(c)) ?? 'url(#wm-hatch)'
                 : guided

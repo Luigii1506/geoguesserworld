@@ -6,7 +6,7 @@ import { SORT, TAG_LABEL, factLine, kindLabel, volcanoStatus } from '../../lib/g
 type Countries = Map<string, GeoCountryRow>
 
 function where(c: GeoCard, countries: Countries) {
-  if (c.ccs && c.ccs.length > 1) return `${c.ccs.map((x) => countries.get(x)?.flag ?? '').join(' ')} ${c.ccs.length} países`
+  if (c.ccs && c.ccs.length > 1) return `${c.ccs.slice(0, 3).map((x) => countries.get(x)?.flag ?? '').join(' ')} ${c.ccs.length} países`
   const country = c.cc ? countries.get(c.cc) : undefined
   return country ? `${country.flag ?? ''} ${country.name}` : ''
 }
