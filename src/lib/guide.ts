@@ -2,7 +2,7 @@
 // carga los datos, ordena por importancia y agrupa las pistas por tema.
 
 import { useMemo } from 'react'
-import { type Cluster, type Hint, type MetaObject, useCountryFile, useCountryMap, useMeta, useMetaObjects } from './data'
+import { type Cluster, type Hint, type MetaObject, useCountryFile, useCountryMap, useCountryObjects, useMeta } from './data'
 import { OBJECT_CATEGORY, SUBCATEGORY_LABEL } from './labels'
 
 // Orden de los temas: primero la meta que más decide (coche, bolardos, líneas…).
@@ -51,7 +51,7 @@ export function useGuide(code: string | undefined) {
   const file = useCountryFile(code)
   const map = useCountryMap()
   const meta = useMeta()
-  const objectsFile = useMetaObjects()
+  const objectsFile = useCountryObjects(code)
 
   const country = code ? map.get(code) : undefined
   const catName = (id: string) => meta?.categories.find((c) => c.id === id)?.name ?? id
@@ -61,7 +61,7 @@ export function useGuide(code: string | undefined) {
     const m = new Map((objectsFile?.traits ?? []).map((t) => [`${t.type}|${t.key}|${t.value}`, t.n]))
     return (type: string, key: string, value: string) => m.get(`${type}|${key}|${value}`)
   }, [objectsFile])
-  const objects = useMemo(() => (objectsFile?.objects ?? []).filter((o) => o.country === code), [objectsFile, code])
+  const objects = useMemo(() => objectsFile?.objects ?? [], [objectsFile])
 
   const textOf = (c: Cluster) => (hints.get(c.canonical_id)?.text ?? '').trim()
   const imagesOf = (c: Cluster) => (c.images ?? hints.get(c.canonical_id)?.images ?? []).filter((u) => u !== file?.summaryImage)

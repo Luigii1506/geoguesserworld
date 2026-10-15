@@ -162,11 +162,33 @@ export interface QuizFile {
 
 const cache = new Map<string, Promise<unknown>>()
 
+// Datos de las guías (/community/…):
+//   · `npm run dev`: los sirve Vite desde public/community
+//   · build: el Worker desde R2, con la huella del contenido en el nombre
+//     (community/country/mx.3f2a9c1b.json, según community/manifest.json): el
+//     navegador los guarda para siempre y solo descarga lo que cambió
+const env = import.meta.env
+const REMOTE = env.DEV ? '' : ((env.VITE_API_BASE as string | undefined) ?? (env.VITE_IMAGE_BASE as string | undefined) ?? '').replace(/\/+$/, '')
+const KEY = env.VITE_IMAGE_KEY as string | undefined
+const withKey = (url: string) => (KEY ? `${url}${url.includes('?') ? '&' : '?'}k=${encodeURIComponent(KEY)}` : url)
+let manifest: Promise<Record<string, string>> | null = null
+async function communityUrl(path: string): Promise<string> {
+  if (!REMOTE) return `/community/${path}`
+  // el manifiesto se pide sin caché larga: es lo único que cambia al publicar
+  manifest ??= fetch(withKey(`${REMOTE}/community/manifest.json`))
+    .then((r) => (r.ok ? r.json() : {}))
+    .catch(() => ({}))
+  const files = await manifest
+  return withKey(`${REMOTE}/community/${files[path] ?? path}`)
+}
+
 export function loadJson<T>(url: string): Promise<T | null> {
   if (!cache.has(url)) {
+    const resolved = url.startsWith('/community/') ? communityUrl(url.slice('/community/'.length)) : Promise.resolve(url)
     cache.set(
       url,
-      fetch(url)
+      resolved
+        .then((u) => fetch(u))
         .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
         .catch(() => null),
     )
@@ -195,7 +217,9 @@ export const useCountries = () => useJson<CountryRow[]>('/community/countries.js
 export const useMeta = () => useJson<MetaFile>('/community/meta.json')
 export const useCountryFile = (cc: string | undefined) => useJson<CountryFile>(cc ? `/community/country/${cc}.json` : null)
 export const useMetaObjects = () => useJson<MetaObjectsFile>('/community/meta-objects.json')
-export const useQuiz = () => useJson<QuizFile>('/community/quiz.json')
+/** Objetos de meta de un país y los contadores de sus rasgos (pocos KB). */
+export const useCountryObjects = (cc: string | undefined) =>
+  useJson<{ objects: MetaObject[]; traits: Omit<Trait, 'countries'>[] }>(cc ? `/community/objects/${cc}.json` : null)
 
 /** Mapa código → país, para nombres y banderas. */
 export function useCountryMap(): Map<string, CountryRow> {

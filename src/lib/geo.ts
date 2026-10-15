@@ -150,6 +150,8 @@ export interface ListQuery {
   tags?: string[]
   hints?: boolean
   photo?: boolean
+  /** con artículo en al menos 20 Wikipedias */
+  famous?: boolean
   sort?: string
   order?: 'asc' | 'desc'
   offset?: number
@@ -163,11 +165,19 @@ function withKey(path: string): string {
 }
 
 /** URL de un archivo de capa (atlas/layers/…, atlas/vector/…). */
-export const geoAssetUrl = (path: string) => withKey(`/${path.replace(/^\/+/, '')}`)
+export const geoAssetUrl = (path: string) => withKey(`/${path.replace(/^\/+/, '')}`)  // path puede traer ?v=<huella>
+
+/** URL de la API (`geo/list?…`, `gg/visual?…`), con la base y la clave de cada entorno. */
+export const apiUrl = (path: string) => withKey(`/api/${path}`)
 
 const cache = new Map<string, Promise<unknown>>()
 export function geoFetch<T>(path: string): Promise<T> {
-  const url = withKey(`/api/geo/${path}`)
+  return apiGet<T>(`geo/${path}`)
+}
+
+/** GET a la API con caché en memoria (la misma URL se pide una sola vez por sesión). */
+export function apiGet<T>(path: string): Promise<T> {
+  const url = apiUrl(path)
   if (!cache.has(url)) {
     const p = fetch(url).then(async (r) => {
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `HTTP ${r.status}`)

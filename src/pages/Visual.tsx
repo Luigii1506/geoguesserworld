@@ -1,117 +1,109 @@
-import { useMemo, useState } from 'react'
-import { useCountryMap, useJson, countryFlag, countryLabel } from '../lib/data'
+import { useEffect, useState } from 'react'
+import { useCountryMap, countryFlag, countryLabel } from '../lib/data'
 import { REGION_ES, SOURCE_NAMES } from '../lib/labels'
 import { Lightbox, Loading, MissingData } from '../components/ui'
 import { imageSrc } from '../lib/images'
+import { useGeo } from '../lib/geo'
+import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
 
 // Explorador de fotos: una categoría, todos los países, con las imágenes de
-// todas las fuentes del pipeline (public/community/, uso personal).
-
-interface VisualItem {
-  c: string | null
-  n?: string
-  s: string
-  k: string
-  sk?: string
-  t: string
-  i: string
-  l: string
-}
-
-interface VisualIndex {
-  generatedAt: string
-  counts: Record<string, number>
-  categories: { id: string; name: string; grp: string }[]
-  items: VisualItem[]
-}
+// todas las fuentes. Pide a la API páginas de 60 fotos (y las facetas de la
+// categoría) en lugar de descargar el índice entero.
 
 const SOURCE_BY_LETTER: Record<string, string> = { p: 'plonkit', g: 'geometas', h: 'geohints', t: 'geotips', l: 'learnablemeta', o: 'openguessr' }
 const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
 const PAGE = 60
 
 export default function Visual() {
-  const index = useJson<VisualIndex>('/community/visual-index.json')
+  const meta = useGeo('gg-visual-meta', guides.visualMeta)
   const map = useCountryMap()
   const [cat, setCat] = useState('bollards')
   const [sub, setSub] = useState('')
   const [region, setRegion] = useState('')
   const [pais, setPais] = useState('')
   const [fuente, setFuente] = useState('')
-  const [limit, setLimit] = useState(PAGE)
+  const [items, setItems] = useState<VisualItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [facets, setFacets] = useState<{ subs: [string, number][]; countries: Record<string, number> } | null>(null)
+  const [loading, setLoading] = useState(true)
   const [box, setBox] = useState<number | null>(null)
 
-  const items = index?.items ?? []
+  const query: VisualQuery = { cat, sub: sub || undefined, cc: pais || undefined, continent: region || undefined, src: fuente || undefined, limit: PAGE }
+  const key = JSON.stringify(query)
+  // primera página (con facetas) cada vez que cambian los filtros
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    guides.visual({ ...query, offset: 0 }).then(
+      (r) => {
+        if (!alive) return
+        setItems(r.items)
+        setTotal(r.total)
+        if (r.facets) setFacets(r.facets)
+        setLoading(false)
+      },
+      () => alive && setLoading(false),
+    )
+    return () => {
+      alive = false
+    }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const more = () => {
+    setLoading(true)
+    guides.visual({ ...query, offset: items.length }).then((r) => {
+      setItems((x) => [...x, ...r.items])
+      setLoading(false)
+    })
+  }
+
+  if (meta.error) return <MissingData />
+  if (!meta.data) return <Loading what="fotos" />
+
   const label = (code: string | null, raw?: string) => (code ? countryLabel(map, code) : raw ?? '—')
-  const inCat = useMemo(() => items.filter((it) => it.k === cat), [items, cat])
-
-  const subcats = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const it of inCat) if (it.sk) m.set(it.sk, (m.get(it.sk) ?? 0) + 1)
-    return [...m.entries()].sort((a, b) => b[1] - a[1])
-  }, [inCat])
-
-  const availableCountries = useMemo(
-    () => [...new Set(inCat.filter((it) => it.c).map((it) => it.c as string))].sort((a, b) => label(a).localeCompare(label(b), 'es')),
-    [inCat, map],
-  )
-
-  const filtered = useMemo(
-    () =>
-      inCat
-        .filter((it) => {
-          if (sub && it.sk !== sub) return false
-          if (pais && it.c !== pais) return false
-          if (fuente && it.s !== fuente) return false
-          if (region && (!it.c || map.get(it.c)?.region !== region)) return false
-          return true
-        })
-        .sort((a, b) => label(a.c, a.n).localeCompare(label(b.c, b.n), 'es')),
-    [inCat, sub, pais, fuente, region, map],
-  )
-
-  if (index === undefined) return <Loading what="fotos" />
-  if (index === null) return <MissingData />
-
-  const reset = () => setLimit(PAGE)
-  const shown = filtered.slice(0, limit)
+  const countries = Object.keys(facets?.countries ?? {}).sort((a, b) => label(a).localeCompare(label(b), 'es'))
+  const photos = Object.values(meta.data.counts).reduce((a, b) => a + b, 0)
+  const pick = (fn: () => void) => {
+    fn()
+    setBox(null)
+  }
 
   return (
     <div>
       <header className="page-head">
         <h1>Fotos</h1>
-        <p className="lead">{items.length.toLocaleString('es')} imágenes de seis fuentes. Elige un tema y compara cómo es en cada país.</p>
+        <p className="lead">{photos.toLocaleString('es')} imágenes de seis fuentes. Elige un tema y compara cómo es en cada país.</p>
       </header>
 
       <div className="toolbar">
-        <select className="select" value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); setPais(''); reset() }}>
-          {[...new Set(index.categories.map((c) => c.grp))].map((g) => (
+        <select className="select" value={cat} onChange={(e) => pick(() => { setCat(e.target.value); setSub(''); setPais('') })}>
+          {[...new Set(meta.data.categories.map((c) => c.grp))].map((g) => (
             <optgroup key={g} label={g}>
-              {index.categories.filter((c) => c.grp === g && (index.counts[c.id] ?? 0) > 0).map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({index.counts[c.id]})</option>
+              {meta.data!.categories.filter((c) => c.grp === g && (meta.data!.counts[c.id] ?? 0) > 0).map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({meta.data!.counts[c.id]})</option>
               ))}
             </optgroup>
           ))}
         </select>
-        <select className="select" value={pais} onChange={(e) => { setPais(e.target.value); reset() }}>
-          <option value="">Todos los países ({availableCountries.length})</option>
-          {availableCountries.map((c) => <option key={c} value={c}>{label(c)}</option>)}
+        <select className="select" value={pais} onChange={(e) => pick(() => setPais(e.target.value))}>
+          <option value="">Todos los países ({countries.length})</option>
+          {countries.map((c) => <option key={c} value={c}>{label(c)}</option>)}
         </select>
-        <select className="select" value={fuente} onChange={(e) => { setFuente(e.target.value); reset() }}>
+        <select className="select" value={fuente} onChange={(e) => pick(() => setFuente(e.target.value))}>
           <option value="">Todas las fuentes</option>
           {Object.entries(SOURCE_BY_LETTER).map(([k, v]) => <option key={k} value={k}>{SOURCE_NAMES[v]}</option>)}
         </select>
         <div className="seg">
-          <button className={!region ? 'on' : ''} onClick={() => { setRegion(''); reset() }}>Todo</button>
-          {REGIONS.map((r) => <button key={r} className={region === r ? 'on' : ''} onClick={() => { setRegion(r); reset() }}>{REGION_ES[r]}</button>)}
+          <button className={!region ? 'on' : ''} onClick={() => pick(() => setRegion(''))}>Todo</button>
+          {REGIONS.map((r) => <button key={r} className={region === r ? 'on' : ''} onClick={() => pick(() => setRegion(r))}>{REGION_ES[r]}</button>)}
         </div>
       </div>
 
-      {subcats.length > 0 && (
+      {(facets?.subs.length ?? 0) > 0 && (
         <div className="toolbar">
           <div className="chips">
-            <button className={`chip ${!sub ? 'on' : ''}`} onClick={() => { setSub(''); reset() }}>Todos los tipos</button>
-            {subcats.map(([s, n]) => (
-              <button key={s} className={`chip ${sub === s ? 'on' : ''}`} onClick={() => { setSub(s); reset() }}>
+            <button className={`chip ${!sub ? 'on' : ''}`} onClick={() => pick(() => setSub(''))}>Todos los tipos</button>
+            {facets!.subs.map(([s, n]) => (
+              <button key={s} className={`chip ${sub === s ? 'on' : ''}`} onClick={() => pick(() => setSub(s))}>
                 {s.replace(/_/g, ' ')} <span className="muted">{n}</span>
               </button>
             ))}
@@ -119,11 +111,11 @@ export default function Visual() {
         </div>
       )}
 
-      <p className="muted small" style={{ marginBottom: '1rem' }}>{filtered.length.toLocaleString('es')} fotos</p>
+      <p className="muted small" style={{ marginBottom: '1rem' }}>{total.toLocaleString('es')} fotos</p>
 
-      <div className="photo-grid">
-        {shown.map((it, i) => (
-          <figure key={`${it.i}-${i}`} className="photo" style={{ margin: 0 }}>
+      <div className={`photo-grid ${loading && !items.length ? 'is-stale' : ''}`}>
+        {items.map((it, i) => (
+          <figure key={it.id} className="photo" style={{ margin: 0 }}>
             <button className="shot" onClick={() => setBox(i)} aria-label="Ampliar">
               <img src={imageSrc(it.i, 'thumb')} loading="lazy" alt="" />
             </button>
@@ -136,18 +128,18 @@ export default function Visual() {
         ))}
       </div>
 
-      {filtered.length > limit && (
+      {total > items.length && (
         <div style={{ textAlign: 'center', marginTop: '1.6rem' }}>
-          <button className="btn" onClick={() => setLimit((l) => l + PAGE)}>Mostrar más ({filtered.length - limit})</button>
+          <button className="btn" disabled={loading} onClick={more}>{loading ? 'Cargando…' : `Mostrar más (${(total - items.length).toLocaleString('es')})`}</button>
         </div>
       )}
 
       {box !== null && (
         <Lightbox
-          images={shown.map((it) => it.i)}
+          images={items.map((it) => it.i)}
           index={box}
           onClose={() => setBox(null)}
-          caption={<span>{label(shown[box]?.c ?? null, shown[box]?.n)}</span>}
+          caption={<span>{label(items[box]?.c ?? null, items[box]?.n)}</span>}
         />
       )}
     </div>

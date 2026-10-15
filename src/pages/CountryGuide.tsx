@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { type Cluster, type CountryRow, type Hint, type MetaObject, useMetaObjects } from '../lib/data'
+import { type Cluster, type CountryRow, type Hint, type MetaObject, useCountryObjects } from '../lib/data'
 import { hintText, useLang, type Lang } from '../lib/i18n'
 import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, SUBCATEGORY_LABEL, USEFULNESS, attrLabel, valueLabel } from '../lib/labels'
 import { NATIONAL, TOPIC_MAP_LAYER, type Part, type Topic, firstSentence, recognise, useGuide } from '../lib/guide'
@@ -235,7 +235,10 @@ export default function CountryGuide() {
   const { code } = useParams()
   const g = useGuide(code)
   const lang = useLang()
-  const objectsFile = useMetaObjects()
+  // objetos de sus dos gemelos (para el duelo de diferencias)
+  const twinCodes = (g.country?.confusable ?? []).slice(0, 2)
+  const twinA = useCountryObjects(twinCodes[0])
+  const twinB = useCountryObjects(twinCodes[1])
   const [params, setParams] = useSearchParams()
   const [sheet, setSheet] = useState<null | 'filtros' | 'region'>(null)
   const [regionQuery, setRegionQuery] = useState('')
@@ -335,11 +338,11 @@ export default function CountryGuide() {
     return (country.confusable ?? []).slice(0, 2).flatMap((cc) => {
       const other = g.map.get(cc)
       if (!other) return []
-      const theirs = (objectsFile?.objects ?? []).filter((o) => o.country === cc)
+      const theirs = (cc === twinCodes[0] ? twinA : cc === twinCodes[1] ? twinB : null)?.objects ?? []
       const explained = g.objects.flatMap((o) => o.confusedWith.filter((w) => w.country === cc && w.difference).map((w) => w.difference!))
       return [{ other, explained, diffs: differences(g.objects, theirs, country, other).slice(0, 5) }]
     })
-  }, [country, g.map, g.objects, objectsFile])
+  }, [country, g.map, g.objects, twinA, twinB]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // rutina de escaneo: por cada tema, la mejor foto de todo el país, su receta y la regla clave
   const scan = useMemo(() => {
