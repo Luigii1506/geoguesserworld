@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useProgress } from '../lib/storage'
-import { isDue } from '../lib/sm2'
+import { useStudy } from '../lib/study/store'
+import { dueCount } from '../lib/study/cards'
 import { setLang, useLang } from '../lib/i18n'
 import { useUser } from '../lib/auth'
 
@@ -19,11 +19,11 @@ type Theme = 'auto' | 'light' | 'dark'
 const THEME_LABEL: Record<Theme, string> = { auto: 'Auto', light: 'Claro', dark: 'Oscuro' }
 
 export default function Layout() {
-  const progress = useProgress()
+  const study = useStudy()
   const { user, signOut } = useUser()
   const lang = useLang()
   const location = useLocation()
-  const due = Object.entries(progress.srs).filter(([k, s]) => k.includes(':') && isDue(s)).length
+  const due = dueCount(study)
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       return (localStorage.getItem('geomastery.theme') as Theme) || 'auto'

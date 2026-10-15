@@ -13,7 +13,7 @@
 //   DATABASE_URL         (secreto) Neon
 //   ALLOWED_EMAILS       (secreto) correos invitados
 //
-// Las tablas se crean con: node worker/scripts/auth-migrate.mjs
+// Las tablas se crean con: node worker/scripts/migrate.mjs
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { NeonHttpDialect } from './db/neon.js'

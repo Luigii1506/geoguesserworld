@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { Cluster, CountryRow, Hint, MetaObject } from '../lib/data'
@@ -10,6 +10,8 @@ import { imageSrc } from '../lib/images'
 import { geo, useGeo } from '../lib/geo'
 import { entityMetrics, kindCount, kindLabel } from '../lib/geoFormat'
 import { Img } from './Img'
+import { SaveButton } from './study/SaveButton'
+import { hintItem, placeItem } from '../lib/study/items'
 
 export function CountryChip({ code, map, to }: { code: string; map: Map<string, CountryRow>; to?: string }) {
   return (
@@ -337,6 +339,9 @@ function SvModal({ sv, title, credit, onClose }: { sv: SV; title: string; credit
 }
 
 /** Una pista deduplicada: texto, imágenes, ejemplos y sus fuentes. */
+/** País y nombres de categoría de la guía que se está viendo (para guardar sus pistas). */
+export const HintScope = createContext<{ cc?: string; catName?: (id: string) => string }>({})
+
 export function HintItem({ cluster, hints, lang, category, topic }: {
   cluster: Cluster
   hints: Map<number, Hint>
@@ -356,6 +361,8 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
   const [mapAt, setMapAt] = useState<number | null>(null)
   const text = hintText(canonical, lang)
   const sources = cluster.sources.map((s) => SOURCE_NAMES[s] ?? s)
+  const scope = useContext(HintScope)
+  const saveable = scope.cc ? hintItem(cluster, hints, lang, scope.cc, scope.catName) : null
 
   return (
     <article className="hint">
@@ -393,6 +400,7 @@ export function HintItem({ cluster, hints, lang, category, topic }: {
         </div>
       )}
       <div className="hint-meta">
+        {saveable && <SaveButton item={saveable} />}
         {topic && <button className="link topic-link" onClick={topic.onClick}>{topic.label} →</button>}
         {cluster.usefulness === 3 && !topic && <Usefulness value={3} />}
         {cluster.region && <span>{cluster.region}</span>}
@@ -683,7 +691,12 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
                 <span className="pm-country pm-country-plain">{country.flag} {country.name_es ?? country.name}</span>
               ))}
           </div>
-          <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
+          <div className="pm-actions">
+            {e && Number.isFinite(e.lat) && (
+              <SaveButton item={placeItem({ id: e.id, kind: e.kind, name: e.name, cc: e.cc ?? undefined, lat: e.lat, lng: e.lng, thumb: e.thumb ?? undefined, descr: e.descr ?? undefined, bbox: e.bbox ?? undefined })} />
+            )}
+            <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
+          </div>
         </div>
         {places.length > 1 && (
           <div className="pm-places">

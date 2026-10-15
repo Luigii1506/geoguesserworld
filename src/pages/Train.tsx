@@ -1,22 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { type CountryRow, type QuizPhoto, type QuizText, countryFlag, countryLabel, useCountryMap, useMeta } from '../lib/data'
+import { type QuizPhoto, type QuizText, countryFlag, countryLabel, useCountryMap, useMeta } from '../lib/data'
 import { useGeo } from '../lib/geo'
 import { guides, type QuizRequest } from '../lib/guides'
 import { useLang } from '../lib/i18n'
 import { REGION_ES } from '../lib/labels'
 import { LANDMARKS, type Landmark } from '../data/landmarks'
-import { updateProgress, useProgress } from '../lib/storage'
-import { isDue, newSm2State, review } from '../lib/sm2'
+import { reviewCard, savedItems, useStudy } from '../lib/study/store'
+import { isDue, isNew } from '../lib/study/fsrs'
+import { maskText, pickDistractors, shuffle } from '../lib/study/quiz'
+import type { Grade } from '../lib/study/types'
+import { SaveButton } from '../components/study/SaveButton'
 import { Loading, Usefulness } from '../components/ui'
 import WikiImage from '../components/WikiImage'
 import { imageSrc } from '../lib/images'
 
-// Entrenamiento con repetición espaciada (SM-2). Cada pregunta es "¿de qué
-// país es esto?" con distractores que se le parecen de verdad: los países con
-// los que se confunde, y en fotos, solo países que tienen ese mismo objeto.
-// Las preguntas de pistas y fotos las elige la API (/api/gg/quiz) con tu progreso:
-// solo viajan las de la sesión, no el banco entero.
+const StudyHub = lazy(() => import('../components/study/StudyHub'))
+
+// Entrenar tiene dos partes:
+//   · Mi estudio: lo que has guardado con ☆, en tus mazos (components/study/StudyHub.tsx)
+//   · Práctica libre: "¿de qué país es esto?" con preguntas de todas las guías, con
+//     distractores que se le parecen de verdad (los países con los que se confunde y, en
+//     fotos, solo países que tienen ese mismo objeto). Las elige la API (/api/gg/quiz) con
+//     tu progreso: solo viajan las de la sesión, no el banco entero.
+// Las dos repasan con FSRS (lib/study/fsrs.ts) y comparten el progreso.
 
 type Mode = 'mix' | 'text' | 'photo' | 'place'
 type Item =
@@ -31,67 +38,40 @@ interface Question {
 
 const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
 const MODES: [Mode, string][] = [['mix', 'Todo'], ['text', 'Pistas'], ['photo', 'Fotos'], ['place', 'Lugares']]
-const shuffle = <T,>(a: T[]) => {
-  const x = [...a]
-  for (let i = x.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[x[i], x[j]] = [x[j], x[i]]
-  }
-  return x
-}
-
-/**
- * Oculta nombre, capital y gentilicios del país para no regalar la respuesta.
- * Los términos de 4+ letras también tapan las palabras que empiezan por ellos:
- * así "Slovenia" cubre "Slovenian" e "Iceland" cubre "Icelandic", variantes
- * que los datasets de gentilicios no traen.
- */
-function maskText(text: string, terms: string[]) {
-  let out = text
-  for (const t of [...terms].sort((a, b) => b.length - a.length)) {
-    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const tail = t.length >= 4 ? '\\p{L}*' : ''
-    out = out.replace(new RegExp(`(?<![\\p{L}])${esc}${tail}(?![\\p{L}])`, 'giu'), '▢▢▢')
-  }
-  return out
-}
-
-// Para que una opción sea plausible el país debe tener datos suficientes:
-// así no aparecen territorios diminutos como distractor.
-const MIN_GROUPS = 25
-
-/**
- * Distractores en orden de parecido: los 2 más confundibles (de los 3 más
- * fuertes, la lista viene ordenada por peso), después la misma subregión,
- * la misma región y, en último caso, cualquiera.
- */
-function pickDistractors(correct: string, pool: Set<string>, map: Map<string, CountryRow>): string[] {
-  const c = map.get(correct)
-  const ok = (x: string) => pool.has(x) && (map.get(x)?.groups ?? 0) >= MIN_GROUPS
-  const chosen: string[] = []
-  const add = (code: string) => {
-    if (code !== correct && ok(code) && !chosen.includes(code) && chosen.length < 3) chosen.push(code)
-  }
-  const strong = (c?.confusable ?? []).filter(ok)
-  shuffle(strong.slice(0, 3)).slice(0, 2).forEach(add)
-  shuffle([...pool].filter((x) => map.get(x)?.subregion === c?.subregion)).forEach(add)
-  strong.slice(3).forEach(add)
-  shuffle([...pool].filter((x) => map.get(x)?.region === c?.region)).forEach(add)
-  shuffle([...pool]).forEach(add)
-  return chosen
-}
-
-const GRADES = [
-  { q: 3, label: 'Me costó' },
-  { q: 4, label: 'Bien' },
-  { q: 5, label: 'Fácil' },
+const GRADES: { g: Grade; label: string }[] = [
+  { g: 2, label: 'Me costó' },
+  { g: 3, label: 'Bien' },
+  { g: 4, label: 'Fácil' },
 ]
 
 export default function Train() {
+  const [params, setParams] = useSearchParams()
+  const s = useStudy()
+  // con algo guardado se abre Mi estudio; ?pais= (desde una guía) y ?modo=libre, la práctica libre
+  const free = params.get('modo') === 'libre' || params.has('pais') || (s.ready && savedItems(s).length === 0 && !params.has('mazo'))
+  const go = (libre: boolean) => setParams(libre ? { modo: 'libre' } : {}, { replace: true })
+  return (
+    <div>
+      <div className="train-tabs seg" role="tablist" aria-label="Entrenar">
+        <button role="tab" aria-selected={!free} className={!free ? 'on' : ''} onClick={() => go(false)}>Mi estudio</button>
+        <button role="tab" aria-selected={free} className={free ? 'on' : ''} onClick={() => go(true)}>Práctica libre</button>
+      </div>
+      {free ? (
+        <Practice />
+      ) : (
+        <Suspense fallback={<div className="empty">Cargando tu estudio…</div>}>
+          <StudyHub initialDeck={params.get('mazo') ?? undefined} />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
+function Practice() {
   const [params] = useSearchParams()
   const meta = useMeta()
   const map = useCountryMap()
-  const progress = useProgress()
+  const study = useStudy()
   const lang = useLang()
 
   const [mode, setMode] = useState<Mode>('mix')
@@ -116,10 +96,11 @@ export default function Train() {
       .map((l): Item => ({ kind: 'place', key: `l:${l.id}`, country: l.country, data: l })),
     [mode, scope, essentialOnly, category, map], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const keys = Object.keys(progress.srs)
+  // las tarjetas de la práctica libre son las de clave sin "#" (pistas t:, fotos p:, lugares l:)
+  const keys = Object.keys(study.cards).filter((k) => !k.includes('#') && /^(t|p|l):/.test(k))
   const dueKeys = useMemo(
-    () => new Set(Object.entries(progress.srs).filter(([k, s]) => k.includes(':') && isDue(s)).map(([k]) => k)),
-    [progress.srs],
+    () => new Set(keys.filter((k) => !isNew(study.cards[k].state) && isDue(study.cards[k].state))),
+    [study.cards], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const request = (size: number): QuizRequest => ({
     mode: mode === 'place' ? 'mix' : mode, scope, essential: essentialOnly, category, size,
@@ -155,7 +136,7 @@ export default function Train() {
       )
       // repaso primero (de la API y de los lugares), luego lo nuevo; máximo 2 por país
       const localDue = shuffle(places.filter((i) => dueKeys.has(i.key)))
-      const localFresh = shuffle(places.filter((i) => !progress.srs[i.key]))
+      const localFresh = shuffle(places.filter((i) => !study.cards[i.key]))
       const ordered = [...shuffle([...fromApi.filter((i) => i.due), ...localDue]), ...shuffle([...fromApi.filter((i) => !i.due), ...localFresh])]
       const chosen: (Item & { pool?: string })[] = []
       const perCountry = new Map<string, number>()
@@ -192,20 +173,14 @@ export default function Train() {
     const ms = Date.now() - started.current
     setPicked(code)
     setResults((r) => [...r, { item, ok }])
-    updateProgress((p) => ({
-      ...p,
-      log: [...p.log.slice(-1999), { date: new Date().toISOString(), questionId: item.key, correct: ok, ms, mode: 'practica' }],
-      srs: ok ? p.srs : { ...p.srs, [item.key]: review(p.srs[item.key] ?? newSm2State(), 1, ms) },
-    }))
+    // fallo: "otra vez" al momento (y la confusión queda anotada); acierto: la nota la eliges tú
+    if (!ok) reviewCard(item.key, 1, { cc: item.country, answer: code, ms })
   }
 
-  function next(grade?: number) {
+  function next(grade?: Grade) {
     if (!session) return
     const { item } = session[idx]
-    if (grade !== undefined) {
-      const ms = Date.now() - started.current
-      updateProgress((p) => ({ ...p, srs: { ...p.srs, [item.key]: review(p.srs[item.key] ?? newSm2State(), grade, ms) } }))
-    }
+    if (grade !== undefined) reviewCard(item.key, grade, { cc: item.country, answer: item.country, ms: Date.now() - started.current })
     setIdx((i) => i + 1)
     setPicked(null)
     started.current = Date.now()
@@ -309,11 +284,17 @@ export default function Train() {
                 {item.kind === 'text' && item.data.n > 1 && <>Lo confirman {item.data.n} fuentes. </>}
                 <Link to={`/pais/${item.country}`}>Guía de {countryLabel(map, item.country)}</Link>
               </p>
+              {item.kind === 'text' && (
+                <SaveButton item={{ key: item.key, kind: 'hint', cc: item.country, data: { text: text, lang, cat: item.data.k, catName: catName(item.data.k), sub: item.data.sk, region: item.data.r, u: item.data.u, img: item.data.i } }} />
+              )}
+              {item.kind === 'photo' && (
+                <SaveButton item={{ key: `f:${item.data.i}`, kind: 'photo', cc: item.country, data: { img: item.data.i, cat: item.data.k, catName: catName(item.data.k), sub: item.data.sk } }} />
+              )}
               {correct ? (
                 <div className="row">
                   <span className="muted small">¿Qué tal?</span>
                   {GRADES.map((g) => (
-                    <button key={g.q} className={`btn ${g.q === 4 ? 'btn-primary' : ''}`} onClick={() => next(g.q)}>{g.label}</button>
+                    <button key={g.g} className={`btn ${g.g === 3 ? 'btn-primary' : ''}`} onClick={() => next(g.g)}>{g.label}</button>
                   ))}
                 </div>
               ) : (

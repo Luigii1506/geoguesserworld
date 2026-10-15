@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { auth, UserContext, type User } from '../lib/auth'
 import { resetManifest } from '../lib/data'
 import { NEEDS_LOGIN } from '../lib/remote'
+import { closeStudy, openStudy } from '../lib/study/store'
+import { startSync, syncNow } from '../lib/study/sync'
 
 // La app publicada pide iniciar sesión antes de cargar ningún dato (en `npm run dev`, no).
 // Si la sesión caduca a mitad (una respuesta 401), vuelve a esta pantalla y, al entrar,
@@ -28,6 +30,17 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('auth:expired', expired)
   }, [])
 
+  // el estudio de la cuenta (o el del dispositivo, en desarrollo) y su sincronización
+  const owner = state.status === 'in' ? (state.user?.id ?? 'local') : null
+  useEffect(() => {
+    if (!owner) return
+    // al cambiar de cuenta también se baja lo suyo
+    openStudy(owner).then(() => {
+      startSync()
+      void syncNow()
+    })
+  }, [owner])
+
   if (state.status === 'loading') return <div className="page-loading" aria-busy="true" />
   if (state.status === 'out') {
     return (
@@ -41,7 +54,15 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       />
     )
   }
-  const signOut = () => auth.signOut().finally(() => setState({ status: 'out', expired: false }))
+  // antes de salir se envía lo pendiente (si no hay red, se queda en el dispositivo para la próxima vez)
+  const signOut = () =>
+    syncNow()
+      .catch(() => {})
+      .then(() => auth.signOut())
+      .finally(() => {
+        closeStudy()
+        setState({ status: 'out', expired: false })
+      })
   return <UserContext.Provider value={{ user: state.user, signOut }}>{children}</UserContext.Provider>
 }
 

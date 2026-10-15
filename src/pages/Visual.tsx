@@ -5,6 +5,8 @@ import { DataError, Lightbox, Loading } from '../components/ui'
 import { useGeo } from '../lib/geo'
 import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
 import { Img } from '../components/Img'
+import { SaveButton } from '../components/study/SaveButton'
+import { photoItem } from '../lib/study/items'
 
 // Explorador de fotos: una categoría, todos los países, con las imágenes de
 // todas las fuentes. Pide a la API páginas de 60 fotos (y las facetas de la
@@ -59,6 +61,7 @@ export default function Visual() {
   if (meta.error) return <DataError error={meta.error} what="las fotos" />
   if (!meta.data) return <Loading what="fotos" />
 
+  const catName = (id: string) => meta.data?.categories.find((c) => c.id === id)?.name ?? id
   const label = (code: string | null, raw?: string) => (code ? countryLabel(map, code) : raw ?? '—')
   const countries = Object.keys(facets?.countries ?? {}).sort((a, b) => label(a).localeCompare(label(b), 'es'))
   const photos = Object.values(meta.data.counts).reduce((a, b) => a + b, 0)
@@ -115,10 +118,11 @@ export default function Visual() {
 
       <div className={`photo-grid ${loading && !items.length ? 'is-stale' : ''}`}>
         {items.map((it, i) => (
-          <figure key={it.id} className="photo" style={{ margin: 0 }}>
+          <figure key={it.id} className="photo" style={{ margin: 0, position: 'relative' }}>
             <button className="shot" onClick={() => setBox(i)} aria-label="Ampliar">
               <Img src={it.i} />
             </button>
+            {it.c && <span className="photo-save"><SaveButton compact item={photoItem(it, catName)} /></span>}
             <figcaption className="photo-caption">
               <span>{it.c ? countryFlag(map, it.c) : ''} {label(it.c, it.n)}</span>
               <span className="muted">{SOURCE_NAMES[SOURCE_BY_LETTER[it.s]] ?? it.s}</span>

@@ -3,6 +3,7 @@
 //
 //   /                                  la app (pública: sin sesión muestra el acceso)
 //   /api/auth/…                        cuentas: Better Auth sobre Neon (src/auth.js)
+//   POST /api/me/sync                  estudio de cada usuario (src/me.js, Neon)
 //   GET /img/ab/<sha1>.webp            imagen grande (1600 px)
 //   GET /thumb/ab/<sha1>.webp          miniatura (480 px); también .avif
 //   GET /sm/ab/<sha1>.webp             miniatura pequeña (240 px, cuadrículas del móvil); también .avif
@@ -17,6 +18,7 @@
 
 import { handleApi } from './geo/router.js'
 import { getAuth, sessionOf } from './auth.js'
+import { handleMe } from './me.js'
 
 const IMAGE = /^\/(img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(webp|avif)$/
 const GEO_ASSET = /^\/(atlas|community)\/[a-z0-9_./-]+\.(webp|png|json)$/
@@ -97,6 +99,12 @@ export default {
     if (url.pathname.startsWith('/api/auth/')) {
       const auth = getAuth(env)
       return auth ? auth.handler(request) : Response.json({ error: 'cuentas sin configurar' }, { status: 503 })
+    }
+    // datos de cada usuario: solo con sesión (la clave de herramientas no tiene usuario)
+    if (url.pathname.startsWith('/api/me/')) {
+      const session = await sessionOf(env, request)
+      if (!session) return Response.json({ error: 'inicia sesión' }, { status: 401, headers: { 'cache-control': 'no-store' } })
+      return handleMe(request, env, session.user)
     }
     const isImage = IMAGE.test(url.pathname)
     const isAsset = GEO_ASSET.test(url.pathname) && !url.pathname.includes('..')

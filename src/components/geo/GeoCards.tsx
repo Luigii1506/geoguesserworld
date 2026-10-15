@@ -1,6 +1,8 @@
 import type { GeoCard, GeoCountryRow } from '../../lib/geo'
 import { SORT, TAG_LABEL, factLine, kindLabel, volcanoStatus } from '../../lib/geoFormat'
 import { Img } from '../Img'
+import { SaveButton } from '../study/SaveButton'
+import { placeItem } from '../../lib/study/items'
 
 // Tarjeta de galería y fila de ranking de un lugar de la base geográfica.
 
@@ -16,6 +18,7 @@ export function GeoCardView({ c, countries, rank, onOpen }: { c: GeoCard; countr
   const status = volcanoStatus(c)
   const fact = factLine(c.kind, c.facts)
   return (
+    <div className="geo-card-wrap">
     <button className={`geo-card ${c.thumb ? '' : 'noimg'}`} onClick={() => onOpen(c)}>
       <div className="geo-img">
         {c.thumb ? <Img src={c.thumb} /> : <span>{kindLabel(c.kind)}</span>}
@@ -30,6 +33,8 @@ export function GeoCardView({ c, countries, rank, onOpen }: { c: GeoCard; countr
         {c.descr && <span className="geo-desc">{c.descr}</span>}
       </div>
     </button>
+    <span className="geo-save"><SaveButton compact item={placeItem(c)} /></span>
+    </div>
   )
 }
 

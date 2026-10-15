@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useMeta } from '../lib/data'
-import { useProgress } from '../lib/storage'
-import { isDue } from '../lib/sm2'
+import { useStudy } from '../lib/study/store'
+import { dueCount } from '../lib/study/cards'
 
 // Marco StoryBrand (Donald Miller): el jugador es el héroe, GeoMastery el guía,
 // un plan de tres pasos y una sola acción principal.
@@ -10,10 +10,10 @@ const fmt = (n: number | undefined) => (n ?? 0).toLocaleString('es')
 
 export default function Home() {
   const meta = useMeta()
-  const progress = useProgress()
+  const study = useStudy()
   const t = meta?.totals
-  const keys = Object.keys(progress.srs).filter((k) => k.includes(':'))
-  const due = keys.filter((k) => isDue(progress.srs[k])).length
+  const keys = Object.keys(study.cards)
+  const due = dueCount(study)
 
   const primary =
     keys.length === 0

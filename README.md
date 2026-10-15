@@ -223,19 +223,37 @@ solo se ve la pantalla de acceso; pueden crear cuenta los correos de `ALLOWED_EM
 | `CLOUDFLARE_*`, `R2_*` | desplegar y subir a R2 |
 
 ```bash
-node worker/scripts/auth-migrate.mjs        # tablas de Better Auth en Neon (una vez, o al actualizarlo)
+node worker/scripts/migrate.mjs        # tablas de Better Auth en Neon (una vez, o al actualizarlo)
 npm run pipeline -- geo publish secrets     # secretos del Worker desde .env (al cambiarlos)
 npm run release                             # build + D1 + R2 + Worker
 ```
 
 Para invitar a alguien: añade su correo a `ALLOWED_EMAILS` y `npm run pipeline -- geo publish secrets`.
 
-## Repetición espaciada
+## Mi estudio y repetición espaciada
 
-`src/lib/sm2.ts` implementa SM-2 (SuperMemo-2) documentado línea a línea: intervalos
-1 → 6 → `intervalo × EF` días, con factor de facilidad ajustado por la calidad de cada
-respuesta y reinicio al fallar. Las preguntas acertadas piden una autoevaluación honesta
-(Difícil/Bien/Fácil) que alimenta el factor.
+Con ☆ Guardar (en cada pista, foto del explorador y lugar de Geografía) o **Estudiar lo
+esencial** / **Estudiar este tema** en la guía de un país, lo que quieras aprender va a
+**Entrenar → Mi estudio**, organizado en mazos propios y con notas. Cada guardado da varias
+tarjetas ([src/lib/study/cards.ts](src/lib/study/cards.ts)):
+
+- **reconocer**: la pista, la foto o el lugar → ¿de qué país es? (distractores con los países
+  con los que se confunde y, primero, con los que tú lo confundes)
+- **recordar**: «Hungría · bolardos: ¿cómo son?» → lo piensas, lo ves y te puntúas
+- **ubicar**: «¿dónde está Debrecen?» → tocas el mapa y cuenta la distancia (la tolerancia
+  depende del tamaño del lugar)
+
+El repaso usa **FSRS** (el algoritmo de Anki, vía `ts-fsrs`,
+[src/lib/study/fsrs.ts](src/lib/study/fsrs.ts)): programa cada tarjeta para cuando la
+probabilidad de recordarla baja al 90 %. El progreso de la versión SM-2 se migró
+conservando lo aprendido. Mi estudio muestra lo de hoy, la racha, el objetivo diario, la
+previsión de la semana, el dominio por país en el mapa y las parejas de países que confundes
+(con enlace al duelo).
+
+Todo vive primero en el dispositivo (IndexedDB, [src/lib/study/store.ts](src/lib/study/store.ts))
+y se sincroniza con tu cuenta en segundo plano (`POST /api/me/sync`, Neon,
+[worker/src/me.js](worker/src/me.js) y [worker/src/db/study.sql](worker/src/db/study.sql)):
+funciona sin conexión y en varios dispositivos; gana el cambio más reciente.
 
 ## Procedencia y licencias
 

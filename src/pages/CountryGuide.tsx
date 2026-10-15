@@ -7,7 +7,10 @@ import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, SUBCATEGORY_LABEL, USEFULNESS, a
 import { NATIONAL, TOPIC_MAP_LAYER, type Part, type Topic, firstSentence, recognise, useGuide } from '../lib/guide'
 import { imageSrc } from '../lib/images'
 import { countryStreetView } from '../data/capitals'
-import { HintItem, Lightbox, Loading, MissingData, ObjectProfile, PhotoTiles } from '../components/ui'
+import { HintItem, HintScope, Lightbox, Loading, MissingData, ObjectProfile, PhotoTiles } from '../components/ui'
+import { StudyAllButton } from '../components/study/SaveButton'
+import { hintItem } from '../lib/study/items'
+import type { NewItem } from '../lib/study/store'
 import { HintList, Variants, mainObjects, variantObjects } from '../components/guide'
 import { CountryTerrain } from '../components/geo/CountryTerrain'
 import { Img } from '../components/Img'
@@ -443,7 +446,12 @@ export default function CountryGuide() {
   )
   const search = searchInput()
 
+  // guardar en bloque: lo esencial del país, o un tema entero (van al mazo del país)
+  const toItems = (list: Cluster[]) => list.map((c) => hintItem(c, g.hints, lang, country.code, g.catName)).filter((x): x is NewItem => Boolean(x))
+  const essentialItems = () => toItems(g.all.filter((c) => c.usefulness === 3))
+
   return (
+    <HintScope.Provider value={{ cc: country.code, catName: g.catName }}>
     <div className="cg">
       <nav className="crumbs"><Link to="/paises">Países</Link> / {name}</nav>
 
@@ -463,6 +471,7 @@ export default function CountryGuide() {
           </div>
           <div className="row">
             <Link to={`/entrenar?pais=${country.code}`} className="btn btn-primary">Entrenar {name}</Link>
+            {country.essential > 0 && <StudyAllButton label={`Estudiar lo esencial (${country.essential})`} deckName={name} items={essentialItems} />}
             <button className="btn" onClick={() => jump('reconocer')}>Empezar por lo esencial</button>
             {streetView && <a href={streetView} target="_blank" rel="noreferrer" className="btn btn-quiet">Street View</a>}
           </div>
@@ -710,6 +719,7 @@ export default function CountryGuide() {
                       <h2>{g.catName(t.cat)}</h2>
                       <span className="muted">{t.n} {t.n === 1 ? 'pista' : 'pistas'}{t.essential ? ` · ${t.essential} determinantes` : ''}</span>
                       {TOPIC_MAP_LAYER[t.cat] && <Link className="lib-map" to={`/mapas?capa=${TOPIC_MAP_LAYER[t.cat]}`}>Ver en el mapa mundial →</Link>}
+                      <StudyAllButton className="btn btn-quiet btn-sm" label="Estudiar este tema" deckName={name} items={() => toItems(t.parts.flatMap((p) => [...p.hints, ...p.minor]))} />
                     </header>
                   }
                 >
@@ -815,5 +825,6 @@ export default function CountryGuide() {
         <Lightbox images={[g.file.summaryImage]} index={0} onClose={() => setShowSummary(false)} caption={<span>Ficha resumen · Plonk It</span>} />
       )}
     </div>
+    </HintScope.Provider>
   )
 }
