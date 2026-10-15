@@ -2,6 +2,7 @@
 //   npm run pipeline -- geo publish        D1 + R2
 //   npm run pipeline -- geo publish d1     solo la base (D1 "geomastery-geo")
 //   npm run pipeline -- geo publish r2     solo los archivos de las capas (R2 atlas/…)
+//   npm run pipeline -- geo publish community   las guías (R2 community/…, con huella y manifiesto)
 //   añade --dry para generar el SQL sin enviarlo
 //
 // D1: se genera data/geo-work/d1.sql (esquema + datos en INSERT de < 90 KB, el
@@ -147,10 +148,50 @@ async function publishR2(dry) {
   console.log(`[publish] ✓ R2: ${done} archivos`)
 }
 
+// datos de las guías que la app carga enteros (public/community → R2 community/…, con huella)
+const COMMUNITY = path.join(ROOT, 'public', 'community')
+// lo que ahora sirve la API (D1) o ya no usa la app
+const COMMUNITY_SKIP = [/^visual-index\.json$/, /^quiz\.json$/, /^(plonkit|geohints|geometas)\//]
+
+async function publishCommunity(dry) {
+  if (!existsSync(COMMUNITY)) return console.log('[publish] falta public/community (npm run pipeline -- export)')
+  const ledgerFile = path.join(WORK, 'r2-community.json')
+  const ledger = existsSync(ledgerFile) ? JSON.parse(readFileSync(ledgerFile, 'utf8')) : {}
+  const manifest = {}
+  const todo = []
+  for (const file of walk(COMMUNITY)) {
+    const rel = path.relative(COMMUNITY, file).split(path.sep).join('/')
+    if (!rel.endsWith('.json') || COMMUNITY_SKIP.some((re) => re.test(rel))) continue
+    const body = readFileSync(file)
+    const hash = createHash('sha1').update(body).digest('hex').slice(0, 8)
+    const hashed = rel.replace(/\.json$/, `.${hash}.json`)
+    manifest[rel] = hashed
+    if (!ledger[hashed]) todo.push({ key: `community/${hashed}`, body, hashed })
+  }
+  console.log(`[publish] guías: ${Object.keys(manifest).length} archivos · ${todo.length} nuevos o cambiados`)
+  if (dry) return
+  const { put } = r2()
+  const queue = [...todo]
+  let done = 0
+  await Promise.all(Array.from({ length: 10 }, async () => {
+    while (queue.length) {
+      const f = queue.shift()
+      await put(f.key, f.body, 'application/json', 'public, max-age=31536000, immutable')
+      ledger[f.hashed] = 1
+      if (++done % 100 === 0) writeFileSync(ledgerFile, JSON.stringify(ledger))
+    }
+  }))
+  writeFileSync(ledgerFile, JSON.stringify(ledger))
+  // el manifiesto, al final: la app solo ve la versión nueva cuando ya está todo subido
+  await put('community/manifest.json', Buffer.from(JSON.stringify(manifest)), 'application/json', 'public, max-age=60')
+  console.log(`[publish] ✓ guías: ${done} archivos y el manifiesto`)
+}
+
 export async function publish(args) {
   const dry = args.includes('--dry')
   const what = args.filter((a) => !a.startsWith('--'))
   if (!what.length || what.includes('d1')) await publishD1(dry)
   if (!what.length || what.includes('r2')) await publishR2(dry)
+  if (!what.length || what.includes('community')) await publishCommunity(dry)
   if (!dry) console.log('[publish] para servirlo: cd worker && npx wrangler deploy')
 }

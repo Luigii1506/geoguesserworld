@@ -123,6 +123,35 @@ MapSPAM 2020 pide un formulario en Dataverse: si lo descargas, deja
 `spam2020V2r2_global_production.geotiff.zip` y `spam2020V2r2_global_harvested_area.geotiff.zip`
 en `data/raw/mapspam/` y repite `geo layers crops`.
 
+## Guías de GeoGuessr: qué se descarga y cómo se guarda
+
+La regla: **lo que se ve entero va como archivo con huella; lo que se consulta a trozos,
+por la API**.
+
+| Qué | Dónde | Cómo lo pide la app |
+|---|---|---|
+| Guía de cada país (pistas, grupos, atributos) | R2 `community/country/<cc>.<huella>.json` | entera, una vez (caché permanente) |
+| Objetos de meta de cada país (+ rasgos) | R2 `community/objects/<cc>.<huella>.json` | la guía carga el suyo y los de sus 2 gemelos |
+| Países, categorías, mapas temáticos, duelos | R2 `community/…` | enteros, una vez |
+| Objetos de todo el mundo (Buscar) | R2 `community/meta-objects.<huella>.json` | entero (≈150 KB comprimido) |
+| Fotos del explorador (45.000) | D1 `gg_photo` → `GET /api/gg/visual` | páginas de 60 + facetas |
+| Preguntas de Entrenar (27.000) | D1 `gg_quiz` → `POST /api/gg/quiz` | solo las de la sesión (repaso y nuevas, con tu progreso) |
+| Capas del mapa de cada país | R2 `atlas/…?v=<huella>` | una vez (caché permanente) |
+
+`community/manifest.json` (caché de 1 minuto) traduce cada ruta a su versión con huella:
+al publicar solo cambian los archivos modificados, y el navegador no vuelve a descargar
+nada que ya tenga. Todo sale comprimido con brotli por Cloudflare.
+
+```
+npm run pipeline -- export                  public/community (los JSON de la app)
+npm run pipeline -- geo guides              tablas gg_* de data/geo.db (sin reconstruirla)
+npm run pipeline -- geo publish d1 community   D1 y R2 (community/ con huella y manifiesto)
+```
+
+Las claves de `gg_quiz` son las del progreso del usuario (`t:<id>`, `p:<id>:<imagen>`):
+cambiar de cómo se elige no hace perder el repaso. Con usuarios en Neon, la sesión podrá
+leer el progreso en el servidor en lugar de recibirlo en el cuerpo.
+
 ## Fuentes
 
 | Fuente | Aporta | Licencia |

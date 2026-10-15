@@ -303,6 +303,22 @@ export function exportAll(db) {
     const traits = db.prepare('SELECT type, key, value, n, countries FROM trait_stats ORDER BY type, key, n').all()
       .map((t) => ({ ...t, countries: JSON.parse(t.countries) }))
     writeFileSync(path.join(OUT, 'meta-objects.json'), JSON.stringify({ generatedAt: new Date().toISOString().slice(0, 10), objects, traits }))
+    // objetos de cada país con solo los contadores de rasgos que les tocan: la guía carga el
+    // suyo y los de sus gemelos (pocos KB) en lugar de meta-objects.json entero
+    rmSync(path.join(OUT, 'objects'), { recursive: true, force: true })
+    mkdirSync(path.join(OUT, 'objects'), { recursive: true })
+    const byCountry = new Map()
+    for (const o of objects) {
+      if (!byCountry.has(o.country)) byCountry.set(o.country, [])
+      byCountry.get(o.country).push(o)
+    }
+    for (const [cc, own] of byCountry) {
+      const wanted = new Set(own.flatMap((o) => Object.entries(o.attrs).map(([k, v]) => `${o.type}|${k}|${v}`)))
+      writeFileSync(path.join(OUT, 'objects', `${cc}.json`), JSON.stringify({
+        objects: own,
+        traits: traits.filter((t) => wanted.has(`${t.type}|${t.key}|${t.value}`)).map(({ countries, ...t }) => t),
+      }))
+    }
     objectsOut = objects.length
   }
 

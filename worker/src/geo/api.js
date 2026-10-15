@@ -258,7 +258,7 @@ export async function getCountry(db, cc) {
       [cc],
     ),
     db.all(`SELECT ${CARD_COLS} FROM entity e JOIN entity_tag t ON t.entity_id = e.id AND t.tag = 'admin1' WHERE e.cc = ? ORDER BY e.name`, [cc]),
-    db.all('SELECT a.layer_id, a.path, a.bbox, a.width, a.height FROM asset a WHERE a.cc = ?', [cc]),
+    db.all('SELECT a.layer_id, a.path, a.bbox, a.width, a.height, a.hash FROM asset a WHERE a.cc = ?', [cc]),
     // repartos del terreno de todas sus regiones (relieve, vegetación, clima, cultivos)
     db.all(
       `SELECT f.entity_id, f.key, f.scope, f.value FROM fact f JOIN entity e ON e.id = f.entity_id
@@ -287,7 +287,8 @@ export async function getCountry(db, cc) {
     counts: Object.fromEntries(counts.map((r) => [r.kind, r.n])),
     regions: regionCards.map((r) => ({ ...r, terrain: byRegion.get(r.id) })),
     highest: highest.length ? (await withFacts(db, highest))[0] : undefined,
-    layers: assets.map((a) => ({ id: a.layer_id, path: a.path, bbox: a.bbox.split(',').map(Number), width: a.width, height: a.height })),
+    // con ?v=<huella>: el navegador guarda cada capa para siempre y la vuelve a pedir solo si cambia
+    layers: assets.map((a) => ({ id: a.layer_id, path: a.hash ? `${a.path}?v=${a.hash}` : a.path, bbox: a.bbox.split(',').map(Number), width: a.width, height: a.height })),
   }
 }
 

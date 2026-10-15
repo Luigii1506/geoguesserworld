@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, normalize } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { handleGeo, type GeoDb } from './worker/src/geo/api.js'
+import type { GeoDb } from './worker/src/geo/api.js'
+import { handleApi } from './worker/src/geo/router.js'
 
 // Las imágenes de plonkit.net tienen protección anti-hotlink (403 sin su
 // propio Referer), así que el servidor local las pide con ese header. Cada
@@ -126,17 +127,25 @@ function geoApi(): Plugin {
       res.setHeader('cache-control', 'no-cache')
       return res.end(readFileSync(file))
     }
-    if (!url.pathname.startsWith('/api/geo')) return next()
+    if (!url.pathname.startsWith('/api/geo') && !url.pathname.startsWith('/api/gg')) return next()
     if (!existsSync(GEO_DB)) {
       res.statusCode = 503
       res.setHeader('content-type', 'application/json')
       return res.end(JSON.stringify({ error: 'falta data/geo.db: npm run pipeline -- geo build' }))
     }
     try {
-      const { status, body } = await handleGeo(adapter, url)
+      // cuerpo de los POST (sesiones de Entrenar)
+      const body = (req as { method?: string }).method === 'POST'
+        ? await new Promise<string>((ok) => {
+            let data = ''
+            ;(req as unknown as NodeJS.ReadableStream).on('data', (c: Buffer) => (data += c))
+            ;(req as unknown as NodeJS.ReadableStream).on('end', () => ok(data))
+          })
+        : undefined
+      const { status, body: out } = await handleApi(adapter, url, body)
       res.statusCode = status
       res.setHeader('content-type', 'application/json; charset=utf-8')
-      res.end(JSON.stringify(body))
+      res.end(JSON.stringify(out))
     } catch (e) {
       res.statusCode = 500
       res.setHeader('content-type', 'application/json')

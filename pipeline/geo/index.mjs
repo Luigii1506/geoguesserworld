@@ -9,6 +9,11 @@
 // SOURCES es la prioridad: lo que escribe una fuente antes no lo pisa otra.
 
 import { openStore } from './store.mjs'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { ROOT } from '../lib/paths.mjs'
+
+const SCHEMA_FILE = path.join(ROOT, 'geo', 'schema.sql')
 import { derive } from './derive.mjs'
 import * as naturalearth from './sources/naturalearth.mjs'
 import * as wikidata from './sources/wikidata.mjs'
@@ -22,12 +27,13 @@ import * as wikidataEnrich from './sources/wikidata-enrich.mjs'
 import * as wikipedia from './sources/wikipedia.mjs'
 import * as resolve from './sources/resolve.mjs'
 import * as atlas from './layers/index.mjs'
+import * as guides from './sources/guides.mjs'
 import { publish } from './publish.mjs'
 import { meta as countriesMeta } from '../sources/countries-base.mjs'
 
 // orden = prioridad y dependencias: GHSL busca la ciudad principal entre las de GeoNames,
 // GMBA sitúa las cumbres ya cargadas, y el enriquecimiento de Wikidata va al final
-export const SOURCES = [naturalearth, wikidata, gvp, hints, geonames, ghsl, gmba, hydrolakes, resolve, wikidataEnrich, wikipedia, atlas]
+export const SOURCES = [naturalearth, wikidata, gvp, hints, geonames, ghsl, gmba, hydrolakes, resolve, wikidataEnrich, wikipedia, atlas, guides]
 
 function context(staging, opts = {}) {
   return {
@@ -79,5 +85,15 @@ export async function geo(staging, args, opts) {
   if (step === 'build') return runBuild(ctx)
   if (step === 'layers') return atlas.runLayers(rest, ctx)
   if (step === 'publish') return publish(rest)
+  // guías: aplicar a la base actual sin reconstruirla (tras `export`)
+  if (step === 'guides') {
+    const store = openStore()
+    store.db.exec(readFileSync(SCHEMA_FILE, 'utf8'))
+    store.db.exec('BEGIN')
+    await guides.ingest(store, { ...ctx, log: (...a) => console.log('[guides]', ...a) })
+    store.db.exec('COMMIT')
+    store.db.exec('ANALYZE')
+    return store.close()
+  }
   throw new Error(`geo: etapa desconocida "${step}" (download | build | layers | publish)`)
 }

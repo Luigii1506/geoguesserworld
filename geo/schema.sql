@@ -155,3 +155,36 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- ── Guías de GeoGuessr (fuentes de la comunidad) ──
+-- Lo que la app consulta a trozos en lugar de descargarlo entero: las fotos del
+-- explorador visual y las preguntas de Entrenar. Lo llena la fuente "guides"
+-- (pipeline/geo/sources/guides.mjs) desde lo que exporta `npm run pipeline -- export`.
+
+CREATE TABLE IF NOT EXISTS gg_photo (
+  id        INTEGER PRIMARY KEY,
+  cc        TEXT,                 -- país (NULL si la fuente no lo indica)
+  place     TEXT,                 -- nombre en crudo cuando no hay país
+  src       TEXT NOT NULL,        -- letra de la fuente (p plonkit, g geometas, h geohints…)
+  k         TEXT NOT NULL,        -- categoría (bollards, poles…)
+  sk        TEXT,                 -- subcategoría
+  text      TEXT,
+  img       TEXT NOT NULL,
+  link      TEXT,
+  sort_name TEXT NOT NULL         -- país en español (o el nombre en crudo) para ordenar
+);
+CREATE INDEX IF NOT EXISTS gg_photo_k ON gg_photo(k, sort_name);
+CREATE INDEX IF NOT EXISTS gg_photo_cc ON gg_photo(cc, k);
+
+-- preguntas: la clave es la misma del progreso del usuario (t:<id> · p:<id>:<imagen>)
+CREATE TABLE IF NOT EXISTS gg_quiz (
+  key   TEXT PRIMARY KEY,
+  kind  TEXT NOT NULL,            -- text | photo
+  cc    TEXT NOT NULL,
+  k     TEXT NOT NULL,
+  sk    TEXT,
+  u     INTEGER,                  -- utilidad (pistas de texto)
+  data  TEXT NOT NULL             -- la pregunta en JSON (texto en es/en, imagen, región…)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS gg_quiz_scope ON gg_quiz(kind, k, cc);
+CREATE INDEX IF NOT EXISTS gg_quiz_cc ON gg_quiz(cc);
