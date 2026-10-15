@@ -207,6 +207,29 @@ npm run pipeline -- geo publish                    # D1 (incremental) + R2 + Wor
 npm run release                                    # lo anterior y el build de la app
 ```
 
+## Publicación y cuentas
+
+La app publicada vive entera en el Worker de Cloudflare
+(`https://geoguesser-images.luis-e.workers.dev`): sirve `dist/` y, en el mismo origen, la API
+(D1), las fotos y capas (R2) y las cuentas (`/api/auth`, Better Auth sobre Neon). Sin sesión
+solo se ve la pantalla de acceso; pueden crear cuenta los correos de `ALLOWED_EMAILS`.
+
+| En `.env` | Para |
+|---|---|
+| `DATABASE_URL` | Neon (Postgres de las cuentas) |
+| `ALLOWED_EMAILS` | correos invitados, separados por comas |
+| `BETTER_AUTH_SECRET` | firma de las cookies de sesión |
+| `VITE_IMAGE_KEY` | clave de herramientas (`ACCESS_KEY` del Worker; nunca va en la build) |
+| `CLOUDFLARE_*`, `R2_*` | desplegar y subir a R2 |
+
+```bash
+node worker/scripts/auth-migrate.mjs        # tablas de Better Auth en Neon (una vez, o al actualizarlo)
+npm run pipeline -- geo publish secrets     # secretos del Worker desde .env (al cambiarlos)
+npm run release                             # build + D1 + R2 + Worker
+```
+
+Para invitar a alguien: añade su correo a `ALLOWED_EMAILS` y `npm run pipeline -- geo publish secrets`.
+
 ## Repetición espaciada
 
 `src/lib/sm2.ts` implementa SM-2 (SuperMemo-2) documentado línea a línea: intervalos
