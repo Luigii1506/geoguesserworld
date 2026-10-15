@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import AuthGate from './components/AuthGate'
 
 // cada página en su propio archivo: al abrir la app solo se descarga la que se ve
 const Home = lazy(() => import('./pages/Home'))
@@ -35,6 +36,7 @@ function CompareRedirect() {
 
 export default function App() {
   return (
+    <AuthGate>
     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ErrorBoundary>
       <Routes>
@@ -63,5 +65,6 @@ export default function App() {
       </Routes>
       </ErrorBoundary>
     </HashRouter>
+    </AuthGate>
   )
 }

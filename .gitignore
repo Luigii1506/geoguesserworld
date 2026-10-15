@@ -13,3 +13,6 @@ public/community/
 
 # Wrangler (Worker de imágenes)
 .wrangler/
+
+# secretos de wrangler dev
+.dev.vars

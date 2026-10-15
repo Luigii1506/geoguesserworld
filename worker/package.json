@@ -1,0 +1,11 @@
+{
+  "name": "geomastery-worker",
+  "private": true,
+  "type": "module",
+  "description": "Worker de GeoMastery: la app, la API sobre D1, las fotos de R2 y las cuentas (Better Auth sobre Neon)",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "better-auth": "^1.7.10",
+    "kysely": "^0.29.6"
+  }
+}

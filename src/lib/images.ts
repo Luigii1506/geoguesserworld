@@ -1,13 +1,12 @@
 // Dónde se cargan las imágenes propias (/images/<tamaño>/ab/<sha1>.<formato>).
 //   · en local: las sirve Vite desde data/images
-//   · fuera de tu Mac: el Worker del bucket R2 privado, con
-//       VITE_IMAGE_BASE=https://<worker>.workers.dev  y  VITE_IMAGE_KEY=<clave>
+//   · app publicada: el Worker, desde el bucket R2 privado (/thumb/ab/<sha1>.webp…; ver lib/remote.ts)
 // Tamaños: img (1600 px, visor) · thumb (480 px) · sm (240 px, cuadrículas del móvil).
 // Formatos: webp (todas) y avif (thumb y sm; ver pipeline/variants.mjs).
 // Las URLs que no son copia propia (aún sin descargar) se usan tal cual.
 
-const BASE = (import.meta.env.VITE_IMAGE_BASE as string | undefined)?.replace(/\/+$/, '')
-const KEY = import.meta.env.VITE_IMAGE_KEY as string | undefined
+import { LOCAL, remoteUrl } from './remote'
+
 const OWN = /^\/images\/(?:img|thumb|sm)\/([0-9a-f]{2}\/[0-9a-f]{40})\.(?:webp|avif)$/
 
 export type ImageSize = 'img' | 'thumb' | 'sm'
@@ -18,7 +17,7 @@ export function imageSrc(url: string, size: ImageSize = 'img', format: 'webp' | 
   const m = url.match(OWN)
   if (!m) return url
   const path = `${size}/${m[1]}.${format}`
-  return BASE ? `${BASE}/${path}${KEY ? `?k=${encodeURIComponent(KEY)}` : ''}` : `/images/${path}`
+  return LOCAL ? `/images/${path}` : remoteUrl(`/${path}`)
 }
 
 // ── Wikimedia Commons: miniaturas directas (las calcula el pipeline, pipeline/geo/lib/wikimedia.mjs) ──

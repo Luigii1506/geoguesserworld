@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "pipeline": "node --disable-warning=ExperimentalWarning pipeline/run.mjs",
-    "release": "npm run pipeline -- geo publish && npm run build"
+    "release": "npm run build && npm run pipeline -- geo publish"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.1.0",

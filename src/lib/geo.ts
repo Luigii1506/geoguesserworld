@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react'
 import KINDS from '../../geo/kinds.json'
 import { publishedManifest } from './data'
+import { checkAuth, remoteUrl } from './remote'
 
 // Cliente de la API de geografía (/api/geo/…, ver docs/geo.md).
 //   · `npm run dev`: la sirve Vite sobre data/geo.db (mismo origen)
-//   · build: el Worker sobre D1 (VITE_API_BASE o, si no, VITE_IMAGE_BASE), con la clave VITE_IMAGE_KEY
+//   · app publicada: el Worker sobre D1, en el mismo origen (ver lib/remote.ts)
 // Las capas de terreno (/atlas/…) siguen el mismo camino.
-
-const env = import.meta.env
-const BASE = ((env.VITE_API_BASE as string | undefined) ?? (env.DEV ? '' : (env.VITE_IMAGE_BASE as string | undefined)) ?? '').replace(/\/+$/, '')
-const KEY = env.VITE_IMAGE_KEY as string | undefined
 
 export type Kind = keyof typeof KINDS.kinds
 export type Family = (typeof KINDS.families)[number]
@@ -161,16 +158,11 @@ export interface ListQuery {
   facets?: boolean
 }
 
-function withKey(path: string): string {
-  if (!KEY || !BASE) return `${BASE}${path}`
-  return `${BASE}${path}${path.includes('?') ? '&' : '?'}k=${encodeURIComponent(KEY)}`
-}
-
 /** URL de un archivo de capa (atlas/layers/…, atlas/vector/…). */
-export const geoAssetUrl = (path: string) => withKey(`/${path.replace(/^\/+/, '')}`)  // path puede traer ?v=<huella>
+export const geoAssetUrl = (path: string) => remoteUrl(`/${path.replace(/^\/+/, '')}`)  // path puede traer ?v=<huella>
 
 /** URL de la API (`geo/list?…`, `gg/visual?…`), con la base y la clave de cada entorno. */
-export const apiUrl = (path: string) => withKey(`/api/${path}`)
+export const apiUrl = (path: string) => remoteUrl(`/api/${path}`)
 
 const cache = new Map<string, Promise<unknown>>()
 export function geoFetch<T>(path: string): Promise<T> {
@@ -185,7 +177,7 @@ export function geoFetch<T>(path: string): Promise<T> {
 export function apiGet<T>(path: string): Promise<T> {
   const url = apiUrl(path)
   if (!cache.has(url)) {
-    const p = publishedManifest().then((m) => fetch(m._api ? `${url}${url.includes('?') ? '&' : '?'}v=${m._api}` : url)).then(async (r) => {
+    const p = publishedManifest().then((m) => fetch(m._api ? `${url}${url.includes('?') ? '&' : '?'}v=${m._api}` : url)).then(checkAuth).then(async (r) => {
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `HTTP ${r.status}`)
       return r.json()
     })

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useProgress } from '../lib/storage'
 import { isDue } from '../lib/sm2'
 import { setLang, useLang } from '../lib/i18n'
+import { useUser } from '../lib/auth'
 
 // Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
 const NAV = [
@@ -19,6 +20,7 @@ const THEME_LABEL: Record<Theme, string> = { auto: 'Auto', light: 'Claro', dark:
 
 export default function Layout() {
   const progress = useProgress()
+  const { user, signOut } = useUser()
   const lang = useLang()
   const location = useLocation()
   const due = Object.entries(progress.srs).filter(([k, s]) => k.includes(':') && isDue(s)).length
@@ -74,6 +76,11 @@ export default function Layout() {
             >
               {THEME_LABEL[theme]}
             </button>
+            {user && (
+              <button className="btn btn-quiet signout" onClick={signOut} title={`Salir (${user.email})`}>
+                Salir
+              </button>
+            )}
           </div>
         </div>
       </header>

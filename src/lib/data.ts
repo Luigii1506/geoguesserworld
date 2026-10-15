@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLang } from './i18n'
+import { checkAuth, LOCAL, remoteUrl } from './remote'
 
 // Acceso a la base de conocimiento exportada por el pipeline
 // (public/community/, fuera de git). Cada archivo se pide una sola vez.
@@ -165,27 +166,28 @@ const cache = new Map<string, Promise<unknown>>()
 
 // Datos de las guías (/community/…):
 //   · `npm run dev`: los sirve Vite desde public/community
-//   · build: el Worker desde R2, con la huella del contenido en el nombre
+//   · app publicada: el Worker desde R2, con la huella del contenido en el nombre
 //     (community/country/mx.3f2a9c1b.json, según community/manifest.json): el
 //     navegador los guarda para siempre y solo descarga lo que cambió
-const env = import.meta.env
-const REMOTE = env.DEV ? '' : ((env.VITE_API_BASE as string | undefined) ?? (env.VITE_IMAGE_BASE as string | undefined) ?? '').replace(/\/+$/, '')
-const KEY = env.VITE_IMAGE_KEY as string | undefined
-const withKey = (url: string) => (KEY ? `${url}${url.includes('?') ? '&' : '?'}k=${encodeURIComponent(KEY)}` : url)
 let manifest: Promise<Record<string, string>> | null = null
 /** Manifiesto de la publicación: ruta → versión con huella, y `_api` (versión de la base de la API). */
 export function publishedManifest(): Promise<Record<string, string>> {
-  if (!REMOTE) return Promise.resolve({})
+  if (LOCAL) return Promise.resolve({})
   // se pide sin caché larga: es lo único que cambia al publicar
-  manifest ??= fetch(withKey(`${REMOTE}/community/manifest.json`))
+  manifest ??= fetch(remoteUrl('/community/manifest.json'))
+    .then(checkAuth)
     .then((r) => (r.ok ? r.json() : {}))
     .catch(() => ({}))
   return manifest
 }
+/** Tras iniciar sesión, el manifiesto se vuelve a pedir (sin sesión se habría quedado vacío). */
+export function resetManifest() {
+  manifest = null
+}
 async function communityUrl(path: string): Promise<string> {
-  if (!REMOTE) return `/community/${path}`
+  if (LOCAL) return `/community/${path}`
   const files = await publishedManifest()
-  return withKey(`${REMOTE}/community/${files[path] ?? path}`)
+  return remoteUrl(`/community/${files[path] ?? path}`)
 }
 
 export function loadJson<T>(url: string): Promise<T | null> {
@@ -195,6 +197,7 @@ export function loadJson<T>(url: string): Promise<T | null> {
       url,
       resolved
         .then((u) => fetch(u))
+        .then(checkAuth)
         .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
         .catch(() => null),
     )

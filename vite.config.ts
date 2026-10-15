@@ -162,12 +162,12 @@ function geoApi(): Plugin {
 
 // PWA: la app (JS, CSS, fuentes) queda precacheada y abre al instante, también sin red.
 // Los datos se guardan al usarlos, según cómo cambian:
-//   · con huella o versión (API ?v=, capas ?v=, community/<ruta>.<hash>.json): cache-first,
-//     nunca cambian; una publicación nueva trae otras URLs
+//   · con huella o versión (API ?v=, capas ?v=, community/<ruta>.<hash>.json, fotos propias
+//     con su sha1 en el nombre): cache-first, nunca cambian; una publicación nueva trae otras URLs
 //   · community/manifest.json y la API sin versión: red primero, caché si no hay red
-//   · Entrenar (POST) no pasa por la caché
-// Las imágenes (<img> de otro origen, respuestas opacas) se quedan en la caché HTTP del
-// navegador, que ya las guarda un año: en la del service worker ocuparían ~7 MB cada una.
+//   · las cuentas (/api/auth) y Entrenar (POST) no pasan por la caché
+// Las fotos de Wikimedia (otro origen, respuestas opacas) se quedan en la caché HTTP del
+// navegador: en la del service worker ocuparían ~7 MB cada una.
 const path = (url: URL) => url.pathname
 const versioned = (url: URL) => url.searchParams.has('v')
 const days = (n: number) => n * 86400
@@ -195,6 +195,7 @@ const pwa = VitePWA({
     // el mapa a 50 m (750 KB) solo se pide al hacer zoom: se guarda la primera vez que se usa
     globIgnores: ['community/**', 'images/**', 'assets/countries-50m-*.js'],
     navigateFallback: 'index.html',
+    navigateFallbackDenylist: [/^\/api\//],
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
@@ -203,12 +204,17 @@ const pwa = VitePWA({
         options: { cacheName: 'assets', expiration: { maxEntries: 20 }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && versioned(url),
+        urlPattern: ({ url, sameOrigin }) => sameOrigin && /^\/(img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(webp|avif)$/.test(path(url)),
+        handler: 'CacheFirst',
+        options: { cacheName: 'photos', expiration: { maxEntries: 3000, maxAgeSeconds: days(120), purgeOnQuotaError: true }, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && !path(url).startsWith('/api/auth/') && versioned(url),
         handler: 'CacheFirst',
         options: { cacheName: 'api', expiration: { maxEntries: 800, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/'),
+        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && !path(url).startsWith('/api/auth/'),
         handler: 'NetworkFirst',
         options: { cacheName: 'api-live', networkTimeoutSeconds: 4, expiration: { maxEntries: 200, maxAgeSeconds: days(7) }, cacheableResponse: { statuses: [200] } },
       },

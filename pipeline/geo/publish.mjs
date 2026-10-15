@@ -3,7 +3,8 @@
 //   npm run pipeline -- geo publish d1     solo la base (D1 "geomastery-geo")
 //   npm run pipeline -- geo publish r2     solo los archivos de las capas (R2 atlas/…)
 //   npm run pipeline -- geo publish community   las guías (R2 community/…, con huella y manifiesto)
-//   npm run pipeline -- geo publish worker      despliega worker/ (wrangler deploy)
+//   npm run pipeline -- geo publish worker      despliega worker/ con la app de dist/ (wrangler deploy)
+//   npm run pipeline -- geo publish secrets     sube los secretos del Worker desde .env
 //   añade --dry para generar el SQL sin enviarlo y --full para recargar D1 entera
 //
 // D1: se genera data/geo-work/d1.sql y se carga con wrangler (sentencias de < 90 KB; el
@@ -197,7 +198,8 @@ function wrangler(args, opts = {}) {
   const account = env('CLOUDFLARE_ACCOUNT_ID')
   if (!token || !account) throw new Error('Faltan CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID en .env')
   return execFileSync('npx', ['--yes', 'wrangler@4', ...args], {
-    cwd: WORKER_DIR, encoding: 'utf8', maxBuffer: 1 << 26, stdio: opts.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+    cwd: WORKER_DIR, encoding: 'utf8', maxBuffer: 1 << 26, input: opts.input,
+    stdio: opts.inherit ? 'inherit' : [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     env: { ...process.env, CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account },
   })
 }
@@ -329,6 +331,22 @@ async function publishCommunity(dry) {
   console.log(`[publish] ✓ guías: ${done} archivos y el manifiesto`)
 }
 
+// secretos del Worker que salen de .env (ACCESS_KEY es la clave de herramientas, VITE_IMAGE_KEY)
+const SECRETS = { BETTER_AUTH_SECRET: 'BETTER_AUTH_SECRET', DATABASE_URL: 'DATABASE_URL', ALLOWED_EMAILS: 'ALLOWED_EMAILS', ACCESS_KEY: 'VITE_IMAGE_KEY' }
+
+/** Sube a Cloudflare los secretos del Worker desde .env (nunca se imprimen). */
+function publishSecrets() {
+  for (const [name, from] of Object.entries(SECRETS)) {
+    const value = env(from)
+    if (!value) {
+      console.warn(`[publish] ⚠ falta ${from} en .env: ${name} no se actualiza`)
+      continue
+    }
+    wrangler(['secret', 'put', name], { input: value })
+    console.log(`[publish] ✓ secreto ${name}`)
+  }
+}
+
 export async function publish(args) {
   const dry = args.includes('--dry')
   const what = args.filter((a) => !a.startsWith('--'))
@@ -336,6 +354,7 @@ export async function publish(args) {
   if (!what.length || what.includes('r2')) await publishR2(dry)
   // el manifiesto lleva la versión de D1: si se publica D1, también las guías (solo sube lo que cambió)
   if (!what.length || what.includes('community') || what.includes('d1')) await publishCommunity(dry)
+  if (!dry && what.includes('secrets')) publishSecrets()
   if (!dry && (!what.length || what.includes('worker'))) {
     console.log('[publish] Worker: desplegando…')
     wrangler(['deploy'], { inherit: true })

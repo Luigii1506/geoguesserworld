@@ -1,3 +1,4 @@
+import { checkAuth } from './remote'
 import { apiGet, apiUrl } from './geo'
 
 // Cliente de la API de las guías (/api/gg/…, worker/src/geo/gg.js): el explorador
@@ -44,7 +45,7 @@ export const guides = {
   /** Sesión de Entrenar (o, con size 0, solo los recuentos). Sin caché: depende de tu progreso. */
   quiz: async (body: QuizRequest): Promise<QuizSession> => {
     // text/plain: así el navegador no necesita la consulta previa de CORS
-    const r = await fetch(apiUrl('gg/quiz'), { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) })
+    const r = await fetch(apiUrl('gg/quiz'), { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) }).then(checkAuth)
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     return r.json()
   },
