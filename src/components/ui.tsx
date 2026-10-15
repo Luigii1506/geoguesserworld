@@ -45,6 +45,28 @@ export function MissingData() {
   )
 }
 
+/** Hora local a la que se reinicia la cuota diaria de D1 (medianoche UTC). */
+function quotaReset(): string {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+  return next.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** Aviso cuando la API no responde, con el motivo en claro y un botón para reintentar. */
+export function DataError({ error, what = 'los datos' }: { error: string; what?: string }) {
+  const quota = /cuota/i.test(error)
+  return (
+    <div className="empty data-error">
+      <p>
+        {quota
+          ? `Se agotó el límite diario de consultas de la base y ${what} no se pueden cargar ahora. Vuelve a partir de las ${quotaReset()}.`
+          : `No se pudo cargar ${what}: ${error}`}
+      </p>
+      <button className="btn" onClick={() => window.location.reload()}>Reintentar</button>
+    </div>
+  )
+}
+
 export function Loading({ what = 'datos' }: { what?: string }) {
   return <div className="empty">Cargando {what}…</div>
 }

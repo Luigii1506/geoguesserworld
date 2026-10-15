@@ -4,7 +4,7 @@ import { REGION_ES } from '../lib/labels'
 import { useCountries } from '../lib/data'
 import { FAMILIES, geo, geoFetch, useGeo, useGeoPages, type GeoCard, type GeoCountryRow, type GeoList, type ListQuery } from '../lib/geo'
 import { METRIC, SORT, SORTS, SORTS_FOR, TAG_GROUPS, kindCount, kindLabel, nf, popText, type TagGroup } from '../lib/geoFormat'
-import { Loading, PlaceMap } from '../components/ui'
+import { DataError, Loading, PlaceMap } from '../components/ui'
 import { CountryPicker } from '../components/geo/CountryPicker'
 import { GeoCardView, GeoRow } from '../components/geo/GeoCards'
 import { CountryAtlas } from '../components/geo/CountryAtlas'
@@ -176,7 +176,8 @@ export default function Geography() {
     return () => io.disconnect()
   }, [list.done, list.items.length, list.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (meta.error) return <div className="empty">No se pudo cargar la base geográfica: {meta.error}</div>
+  const loadError = meta.error ?? countryRows.error
+  if (loadError) return <DataError error={loadError} what="los datos de geografía" />
   if (!meta.data || !countryRows.data) return <Loading what="la geografía" />
 
   const openCard = (c: GeoCard) => setOpen(c)
@@ -431,7 +432,7 @@ export default function Geography() {
               </div>
 
               {list.error ? (
-                <div className="empty">No se pudo cargar: {list.error}</div>
+                <DataError error={list.error} what="esta lista" />
               ) : list.items.length === 0 && !list.loading ? (
                 <div className="empty">Nada coincide. <button className="link" onClick={clearAll}>Empieza de nuevo</button></div>
               ) : view === 'ranking' ? (

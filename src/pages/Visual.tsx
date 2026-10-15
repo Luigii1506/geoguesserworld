@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useCountryMap, countryFlag, countryLabel } from '../lib/data'
 import { REGION_ES, SOURCE_NAMES } from '../lib/labels'
-import { Lightbox, Loading, MissingData } from '../components/ui'
+import { DataError, Lightbox, Loading } from '../components/ui'
 import { useGeo } from '../lib/geo'
 import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
 import { Img } from '../components/Img'
@@ -56,7 +56,7 @@ export default function Visual() {
     })
   }
 
-  if (meta.error) return <MissingData />
+  if (meta.error) return <DataError error={meta.error} what="las fotos" />
   if (!meta.data) return <Loading what="fotos" />
 
   const label = (code: string | null, raw?: string) => (code ? countryLabel(map, code) : raw ?? '—')

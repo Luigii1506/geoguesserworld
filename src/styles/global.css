@@ -1624,6 +1624,9 @@ a.chip:hover, button.chip:hover { border-color: var(--ink-3); color: var(--ink);
 picture { display: contents; }
 .page-loading { min-height: 60vh; }
 
+.data-error { display: grid; justify-items: center; gap: 0.9rem; }
+.data-error p { margin: 0; max-width: 46ch; }
+
 /* ── acceso ── */
 .login {
   min-height: 100vh; min-height: 100dvh;
