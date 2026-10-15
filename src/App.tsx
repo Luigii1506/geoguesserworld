@@ -1,16 +1,19 @@
+import { lazy } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
-import Home from './pages/Home'
-import Countries from './pages/Countries'
-import Maps from './pages/Maps'
-import CountryGuide from './pages/CountryGuide'
-import Search from './pages/Search'
-import Geography from './pages/Geography'
-import Duel from './pages/Duel'
-import Visual from './pages/Visual'
-import Train from './pages/Train'
-import Sources from './pages/Sources'
+
+// cada página en su propio archivo: al abrir la app solo se descarga la que se ve
+const Home = lazy(() => import('./pages/Home'))
+const Countries = lazy(() => import('./pages/Countries'))
+const Maps = lazy(() => import('./pages/Maps'))
+const CountryGuide = lazy(() => import('./pages/CountryGuide'))
+const Search = lazy(() => import('./pages/Search'))
+const Geography = lazy(() => import('./pages/Geography'))
+const Duel = lazy(() => import('./pages/Duel'))
+const Visual = lazy(() => import('./pages/Visual'))
+const Train = lazy(() => import('./pages/Train'))
+const Sources = lazy(() => import('./pages/Sources'))
 
 // las antiguas páginas de tema y del explorador son ahora la propia guía (una sola página)
 function GuideRedirect() {

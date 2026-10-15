@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWiki } from '../lib/wiki'
+import { Img } from './Img'
 
 interface Props {
   title: string
@@ -38,7 +39,7 @@ export default function WikiImage({ title, eager = false, className = 'wiki-img'
     <div ref={ref}>
       {data?.thumb ? (
         <>
-          <img className={className} src={data.thumb} alt={data.title} loading="lazy" />
+          <Img className={className} src={data.thumb} size="img" sizes="(max-width: 700px) 92vw, 780px" alt={data.title} />
           {showAttribution && (
             <div className="wiki-attr">
               📷{' '}

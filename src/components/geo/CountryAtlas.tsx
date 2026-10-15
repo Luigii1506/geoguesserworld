@@ -31,9 +31,9 @@ function frameProjection(bbox: [number, number, number, number], width: number) 
 function useTopo(path: string | undefined) {
   const [topo, setTopo] = useState<Topology | null>(null)
   useEffect(() => {
+    setTopo(null)
     if (!path) return
     let alive = true
-    setTopo(null)
     fetch(geoAssetUrl(path)).then((r) => (r.ok ? r.json() : null)).then((t) => alive && setTopo(t))
     return () => {
       alive = false
@@ -53,7 +53,12 @@ export function CountryAtlas({ country, onOpen }: Props) {
   const layer: GeoLayer | undefined = rasterLayers.find((l) => l.id === layerId) ?? rasterLayers[0]
   const asset = layer ? assets.get(layer.id) : undefined
   const frame = vectorAsset ?? asset
-  const topo = useTopo(vectorAsset?.path)
+  // vector ligero para la vista inicial; el detallado, al acercar (zoom ≥ 2)
+  const [detailed, setDetailed] = useState(false)
+  const litePath = vectorAsset?.path.replace(/\.json(\?|$)/, '.lite.json$1')
+  const liteTopo = useTopo(litePath)
+  const fullTopo = useTopo(detailed ? vectorAsset?.path : undefined)
+  const topo = fullTopo ?? liteTopo
   // ciudades = áreas urbanas (GHSL): una por aglomeración, sin alcaldías ni barrios sueltos
   const cities = useGeo(`atlas-cities:${country.cc}`, () => geo.list({ cc: country.cc, kind: 'urban', sort: 'population', limit: 14 }))
   const svgRef = useRef<SVGSVGElement>(null)
@@ -63,6 +68,7 @@ export function CountryAtlas({ country, onOpen }: Props) {
   const [px, setPx] = useState(1)
 
   useEffect(() => setFocus(null), [layer?.id, country.cc])
+  useEffect(() => setDetailed(false), [country.cc])
 
   const W = frame?.width ?? 1000
   const H = frame?.height ?? 700
@@ -101,6 +107,7 @@ export function CountryAtlas({ country, onOpen }: Props) {
       .on('zoom', (ev) => {
         select(gRef.current).attr('transform', ev.transform.toString())
         setK(ev.transform.k)
+        if (ev.transform.k >= 2) setDetailed(true)
       })
     zoomRef.current = z
     select(svg).call(z).on('dblclick.zoom', null)

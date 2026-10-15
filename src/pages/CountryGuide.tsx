@@ -10,6 +10,7 @@ import { countryStreetView } from '../data/capitals'
 import { HintItem, Lightbox, Loading, MissingData, ObjectProfile, PhotoTiles } from '../components/ui'
 import { HintList, Variants, mainObjects, variantObjects } from '../components/guide'
 import { CountryTerrain } from '../components/geo/CountryTerrain'
+import { Img } from '../components/Img'
 
 // La guía de un país es una sola página continua, como una landing:
 //   1 Reconócelo · 2 No lo confundas · 3 Ubícate · y la biblioteca entera,
@@ -558,7 +559,7 @@ export default function CountryGuide() {
                       const img = g.imagesOf(c)[0]
                       return (
                         <button key={c.id} className="rcard" onClick={() => jump(topicId(c.category))}>
-                          <div className="rcard-img">{img ? <img src={imageSrc(img, 'thumb')} alt="" loading="lazy" /> : <span>{g.catName(c.category)}</span>}</div>
+                          <div className="rcard-img">{img ? <Img src={img} /> : <span>{g.catName(c.category)}</span>}</div>
                           <div className="rcard-body">
                             <span className="eyebrow">{g.catName(c.category)}</span>
                             <p>{firstSentence(hintText(g.hints.get(c.canonical_id)!, lang))}</p>
@@ -597,7 +598,7 @@ export default function CountryGuide() {
                       <li key={x.cat} className="scan-item">
                         <button className="scan-card" onClick={() => jump(topicId(x.cat))}>
                           <div className="scan-img">
-                            {x.img ? <img src={imageSrc(x.img, 'thumb')} alt="" loading="lazy" /> : null}
+                            {x.img ? <Img src={x.img} /> : null}
                             <span className="scan-step">{i + 1}</span>
                             {x.rare && <span className="scan-rare">rasgo raro</span>}
                           </div>

@@ -153,15 +153,25 @@ export const vector = {
       type: 'FeatureCollection',
       features: features.map((f) => ({ ...f, geometry: rewindForD3(dropEmpty(f.geometry)) })).filter((f) => f.geometry),
     })
-    let topo = topology({ country: fc([country]), admin1: fc(admin1), ranges: fc(ranges), regions: fc(regions), lakes: fc(lakes), rivers: fc(rivers), seas: fc(seas) })
     // simplificar a la escala de la imagen (área de triángulo ~ un tercio de píxel², en grados) y cuantizar
     const degPerPx = (bbox[2] - bbox[0]) / frame.width
-    topo = quantize(simplify(presimplify(topo), degPerPx * degPerPx * 0.35), 1e5)
+    const build = (opts) => {
+      const topo = topology({
+        country: fc([country]), admin1: fc(admin1), ranges: fc(ranges), regions: fc(regions), seas: fc(seas),
+        lakes: fc(lakes.filter((f) => f.properties.area >= minLake * opts.lakeFactor)),
+        rivers: fc(rivers.filter((f) => f.properties.ord <= maxOrd - opts.riverDrop)),
+      })
+      return JSON.stringify(quantize(simplify(presimplify(topo), (degPerPx * opts.px) ** 2 * 0.35), opts.q))
+    }
+    // detalle (al acercar) y versión ligera para la vista inicial: ~2 px de tolerancia, solo
+    // los ríos más caudalosos y los lagos grandes (unas 3–4 veces menos peso)
+    const json = build({ px: 1, lakeFactor: 1, riverDrop: 0, q: 1e5 })
+    const lite = build({ px: 2.2, lakeFactor: 4, riverDrop: 1, q: 2e4 })
     const rel = `atlas/vector/${cc}.json`
     const file = path.join(ASSETS, rel)
     mkdirSync(path.dirname(file), { recursive: true })
-    const json = JSON.stringify(topo)
     writeFileSync(file, json)
+    writeFileSync(file.replace(/\.json$/, '.lite.json'), lite)
     return {
       layer_id: 'vector', cc, path: rel, bbox: bbox.join(','), width: frame.width, height: frame.height,
       bytes: statSync(file).size, hash: createHash('sha1').update(json).digest('hex').slice(0, 12),

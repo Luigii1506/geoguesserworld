@@ -17,6 +17,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { readFileSync, existsSync, renameSync, rmSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR, ROOT } from '../lib/paths.mjs'
+import { commonsThumb, IMAGE_WIDTH, THUMB_WIDTH } from './lib/wikimedia.mjs'
 
 export const GEO_DB = path.join(DATA_DIR, 'geo.db')
 const SCHEMA = path.join(ROOT, 'geo', 'schema.sql')
@@ -237,7 +238,7 @@ export function openStore({ fresh = false, file = GEO_DB } = {}) {
 }
 
 function clean(f, v) {
-  if (typeof v === 'string') v = v.trim()
+  if (typeof v === 'string') v = v.replace(/\r\n?/g, '\n').trim()
   if (v === undefined || v === null || v === '') return null
   if (f === 'lat' || f === 'lng') return round(Number(v), 5)
   if (f === 'fame' || f === 'hints') return Math.round(Number(v)) || 0
@@ -260,6 +261,12 @@ function mergeList(cur, add) {
  */
 function finalize(db) {
   db.exec('BEGIN')
+  // fotos de Wikimedia: miniaturas directas (sin redirección) de 500 px y foto de 960 px
+  const setImg = db.prepare('UPDATE entity SET image = ?, thumb = ? WHERE id = ?')
+  for (const r of db.prepare("SELECT id, image, thumb FROM entity WHERE image LIKE '%Special:FilePath%' OR thumb LIKE '%Special:FilePath%'").all()) {
+    const src = r.image ?? r.thumb
+    setImg.run(commonsThumb(src, IMAGE_WIDTH), commonsThumb(src, THUMB_WIDTH), r.id)
+  }
   db.exec('DELETE FROM entity_country')
   const add = db.prepare('INSERT OR IGNORE INTO entity_country (entity_id, cc) VALUES (?, ?)')
   for (const r of db.prepare('SELECT id, cc, ccs FROM entity').all()) {

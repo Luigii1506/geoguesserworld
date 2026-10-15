@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { type CountryRow, useCountryMap, useJson } from '../lib/data'
 import { imageSrc } from '../lib/images'
 import { Lightbox, Loading, MissingData } from '../components/ui'
+import { Img } from '../components/Img'
 
 // Duelo entre gemelos: los países que más se confunden, enfrentados en fotos.
 // Como una historia: el problema (se confunden), la guía (la clave en una
@@ -131,7 +132,7 @@ function SidePhoto({ side, c, onOpen }: { side: Side; c: CountryRow; onOpen: (im
       <figcaption><span className="flag">{c.flag}</span>{nameOf(c)}{side?.region ? <em> · {side.region}</em> : null}</figcaption>
       {side?.img ? (
         <button className="dd-img" onClick={() => onOpen([side.img!, ...side.more], `${c.flag} ${nameOf(c)} · ${side.text}`)} aria-label="Ampliar">
-          <img src={imageSrc(side.img, 'thumb')} alt="" loading="lazy" />
+          <Img src={side.img} sizes="(max-width: 700px) 46vw, 420px" />
         </button>
       ) : (
         <div className="dd-img dd-noimg">{side ? side.text : 'Sin pistas de este tema'}</div>

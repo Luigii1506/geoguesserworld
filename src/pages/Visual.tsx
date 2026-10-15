@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useCountryMap, countryFlag, countryLabel } from '../lib/data'
 import { REGION_ES, SOURCE_NAMES } from '../lib/labels'
 import { Lightbox, Loading, MissingData } from '../components/ui'
-import { imageSrc } from '../lib/images'
 import { useGeo } from '../lib/geo'
 import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
+import { Img } from '../components/Img'
 
 // Explorador de fotos: una categoría, todos los países, con las imágenes de
 // todas las fuentes. Pide a la API páginas de 60 fotos (y las facetas de la
@@ -117,7 +117,7 @@ export default function Visual() {
         {items.map((it, i) => (
           <figure key={it.id} className="photo" style={{ margin: 0 }}>
             <button className="shot" onClick={() => setBox(i)} aria-label="Ampliar">
-              <img src={imageSrc(it.i, 'thumb')} loading="lazy" alt="" />
+              <Img src={it.i} />
             </button>
             <figcaption className="photo-caption">
               <span>{it.c ? countryFlag(map, it.c) : ''} {label(it.c, it.n)}</span>

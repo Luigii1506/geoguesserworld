@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useProgress } from '../lib/storage'
 import { isDue } from '../lib/sm2'
@@ -78,7 +78,10 @@ export default function Layout() {
         </div>
       </header>
       <main className="page">
-        <Outlet />
+        {/* cada página se descarga al visitarla (React.lazy en App.tsx) */}
+        <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
+          <Outlet />
+        </Suspense>
       </main>
       <footer className="footer">
         <span>GeoMastery · uso personal</span>

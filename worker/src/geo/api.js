@@ -219,7 +219,7 @@ export async function listEntities(db, p) {
 // Las combinaciones habituales (lugar × tipo) se leen de una fila en lugar de
 // recorrer cientos de miles: D1 cobra por filas leídas.
 const SUMMARY_PARAMS = ['cc', 'continent', 'family', 'kind']
-const NEUTRAL_PARAMS = new Set(['sort', 'order', 'offset', 'limit', 'facets', 'k', 't'])
+const NEUTRAL_PARAMS = new Set(['sort', 'order', 'offset', 'limit', 'facets', 'total', 'k', 't', 'v'])
 
 /** Clave de la combinación en facet_cache, o null si la consulta lleva otros filtros. */
 export function summaryKey(p) {

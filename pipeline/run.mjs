@@ -30,6 +30,7 @@ import { demonyms } from './demonyms.mjs'
 import { report } from './report.mjs'
 import { images } from './images.mjs'
 import { upload } from './upload.mjs'
+import { variants } from './variants.mjs'
 import { duels } from './duels.mjs'
 import { atlas } from './atlas.mjs'
 import { streetview } from './streetview.mjs'
@@ -157,6 +158,8 @@ const stages = {
       sources: positional.slice(1),
     }),
   upload: () => upload(db, { limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  // variantes ligeras de las fotos (240 px y AVIF) para las galerías, y su subida a R2
+  variants: () => variants({ upload: !args.includes('--no-upload') }),
   // duelos entre gemelos con DeepSeek (de pago, con caché); luego `export`
   duels: () => duels(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   // lugares mencionados en las pistas (DeepSeek) y sus coordenadas (Natural Earth + OpenStreetMap)

@@ -3,7 +3,11 @@
 //   npm run pipeline -- geo publish d1     solo la base (D1 "geomastery-geo")
 //   npm run pipeline -- geo publish r2     solo los archivos de las capas (R2 atlas/…)
 //   npm run pipeline -- geo publish community   las guías (R2 community/…, con huella y manifiesto)
-//   añade --dry para generar el SQL sin enviarlo
+//   añade --dry para generar el SQL sin enviarlo y --full para recargar D1 entera
+//
+// D1 incremental: se guarda una copia de lo publicado (data/geo-work/d1-published.db) y la
+// siguiente publicación envía solo las filas nuevas, cambiadas o borradas (EXCEPT tabla a
+// tabla). Con otro esquema, publicación completa.
 //
 // D1: se genera data/geo-work/d1.sql (esquema + datos en INSERT de < 90 KB, el
 // límite de D1 por sentencia es 100 KB) y se carga con wrangler. Las tablas se
@@ -12,7 +16,7 @@
 
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
-import { createWriteStream, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { createWriteStream, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { ROOT } from '../lib/paths.mjs'
@@ -27,63 +31,141 @@ const SCHEMA = path.join(ROOT, 'geo', 'schema.sql')
 const MAX_STATEMENT = 90_000 // bytes
 const PUBLIC_XREF = ['wd', 'gn', 'gvp', 'gmba', 'iso', 'iso3', 'ucdb', 'hylak', 'eco', 'ne']
 
-const lit = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' || typeof v === 'bigint' ? String(v) : `'${String(v).replace(/'/g, "''")}'`)
+// el \r se escribe como char(13): al leer el .sql por líneas se perdería
+const lit = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' || typeof v === 'bigint' ? String(v) : `'${String(v).replace(/'/g, "''").replace(/\r/g, "'||char(13)||'")}'`)
 
-/** SQL completo para D1: DROP + esquema + INSERT por lotes (FTS incluida como filas normales). */
-export async function exportSql(file = path.join(WORK, 'd1.sql')) {
-  if (!existsSync(GEO_DB)) throw new Error('falta data/geo.db: npm run pipeline -- geo build')
-  const db = new DatabaseSync(GEO_DB, { readOnly: true })
-  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'entity_fts%'").all().map((r) => r.name)
+const SNAPSHOT = path.join(WORK, 'd1-published.db')
+
+/** Escritor de SQL para D1: INSERT por lotes de < 90 KB y filas enormes completadas por trozos. */
+function sqlWriter(file) {
   const out = createWriteStream(file)
   const write = (s) => new Promise((res) => (out.write(s) ? res() : out.once('drain', res)))
-  for (const t of [...tables, 'entity_fts']) await write(`DROP TABLE IF EXISTS ${t};\n`)
-  await write(readFileSync(SCHEMA, 'utf8').replace(/^--.*$/gm, '') + '\n')
   let rows = 0
-  for (const t of [...tables, 'entity_fts']) {
-    const cols = t === 'entity_fts' ? ['entity_id', 'names'] : db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name)
-    const head = `INSERT INTO ${t} (${cols.join(', ')}) VALUES `
-    let batch = []
-    let size = head.length
-    const flush = async () => {
-      if (!batch.length) return
-      await write(head + batch.join(',') + ';\n')
-      batch = []
-      size = head.length
-    }
-    // los esquemas de xref que solo usa el pipeline para unir fuentes no se publican
-    const where = t === 'entity_xref' ? ` WHERE scheme IN (${PUBLIC_XREF.map(lit).join(', ')})` : ''
-    const pk = t === 'entity_fts' ? [] : db.prepare(`PRAGMA table_info(${t})`).all().filter((c) => c.pk > 0).map((c) => c.name)
-    for (const r of db.prepare(`SELECT ${cols.join(', ')} FROM ${t}${where}`).iterate()) {
-      let v = `(${cols.map((c) => lit(r[c])).join(',')})`
-      // una fila más grande que el límite de D1 (una respuesta precalculada enorme): se inserta
-      // con sus textos largos recortados y se completa con UPDATE … || '…' por trozos
-      if (Buffer.byteLength(v) > MAX_STATEMENT && pk.length) {
-        await flush()
-        const big = cols.filter((c) => typeof r[c] === 'string' && Buffer.byteLength(r[c]) > 20_000)
-        const first = { ...r }
-        for (const c of big) first[c] = ''
-        await write(`${head}(${cols.map((c) => lit(first[c])).join(',')});\n`)
-        const cond = pk.map((k) => `${k} = ${lit(r[k])}`).join(' AND ')
-        for (const c of big) {
-          const text = r[c]
-          for (let i = 0; i < text.length; i += 20_000) await write(`UPDATE ${t} SET ${c} = ${c} || ${lit(text.slice(i, i + 20_000))} WHERE ${cond};\n`)
-        }
-        rows++
-        continue
+  return {
+    write,
+    get rows() {
+      return rows
+    },
+    /** Inserta (o reemplaza) filas de `t` con las columnas `cols`; `pk` para trocear las enormes. */
+    async insert(t, cols, iterator, { replace = false, pk = [] } = {}) {
+      const head = `${replace ? 'INSERT OR REPLACE' : 'INSERT'} INTO ${t} (${cols.join(', ')}) VALUES `
+      let batch = []
+      let size = head.length
+      const flush = async () => {
+        if (!batch.length) return
+        await write(head + batch.join(',') + ';\n')
+        batch = []
+        size = head.length
       }
-      const bytes = Buffer.byteLength(v) + 1
-      if (size + bytes > MAX_STATEMENT) await flush()
-      batch.push(v)
-      size += bytes
-      rows++
+      for (const r of iterator) {
+        const v = `(${cols.map((c) => lit(r[c])).join(',')})`
+        // una fila más grande que el límite de D1 (una respuesta precalculada enorme): se inserta
+        // con sus textos largos vacíos y se completa con UPDATE … || '…' por trozos
+        if (Buffer.byteLength(v) > MAX_STATEMENT && pk.length) {
+          await flush()
+          const big = cols.filter((c) => typeof r[c] === 'string' && Buffer.byteLength(r[c]) > 20_000)
+          const first = { ...r }
+          for (const c of big) first[c] = ''
+          await write(`${head}(${cols.map((c) => lit(first[c])).join(',')});\n`)
+          const cond = pk.map((k) => `${k} = ${lit(r[k])}`).join(' AND ')
+          for (const c of big)
+            for (let i = 0; i < r[c].length; i += 20_000) await write(`UPDATE ${t} SET ${c} = ${c} || ${lit(r[c].slice(i, i + 20_000))} WHERE ${cond};\n`)
+          rows++
+          continue
+        }
+        const bytes = Buffer.byteLength(v) + 1
+        if (size + bytes > MAX_STATEMENT) await flush()
+        batch.push(v)
+        size += bytes
+        rows++
+      }
+      await flush()
+    },
+    /** Borra las filas de `t` cuyas claves vienen en el iterador. */
+    async remove(t, pk, iterator) {
+      let batch = []
+      let size = 0
+      const head = pk.length === 1 ? `DELETE FROM ${t} WHERE ${pk[0]} IN (` : `DELETE FROM ${t} WHERE (${pk.join(', ')}) IN (VALUES `
+      const flush = async () => {
+        if (!batch.length) return
+        await write(`${head}${batch.join(',')});\n`)
+        batch = []
+        size = 0
+      }
+      for (const r of iterator) {
+        const v = pk.length === 1 ? lit(r[pk[0]]) : `(${pk.map((k) => lit(r[k])).join(',')})`
+        if (size + v.length > MAX_STATEMENT - 200) await flush()
+        batch.push(v)
+        size += v.length + 1
+        rows++
+      }
+      await flush()
+    },
+    end: () => new Promise((res) => out.end(res)),
+  }
+}
+
+/** Tablas que se publican, con sus columnas, clave y filtro (FTS: por rowid, para conservar el orden). */
+function tablesOf(db) {
+  const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'entity_fts%'").all().map((r) => r.name)
+  return [
+    ...names.map((t) => {
+      const info = db.prepare(`PRAGMA table_info(${t})`).all()
+      return {
+        t, cols: info.map((c) => c.name), pk: info.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name),
+        // los esquemas de xref que solo usa el pipeline para unir fuentes no se publican
+        where: t === 'entity_xref' ? `WHERE scheme IN (${PUBLIC_XREF.map(lit).join(', ')})` : '',
+      }
+    }),
+    { t: 'entity_fts', cols: ['rowid', 'entity_id', 'names'], pk: ['rowid'], where: '' },
+  ]
+}
+
+/** Esquema (para saber si una publicación incremental es posible). */
+const schemaOf = (db) => db.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'entity_fts_%' ORDER BY name").all().map((r) => `${r.type}|${r.name}|${r.sql}`).join('\n')
+
+/**
+ * SQL para D1. Completo: DROP + esquema + todas las filas. Incremental (si hay copia de lo
+ * último publicado con el mismo esquema): solo filas nuevas o cambiadas y las borradas.
+ */
+export async function exportSql(file = path.join(WORK, 'd1.sql'), { full = false } = {}) {
+  if (!existsSync(GEO_DB)) throw new Error('falta data/geo.db: npm run pipeline -- geo build')
+  const db = new DatabaseSync(GEO_DB, { readOnly: true })
+  let incremental = !full && existsSync(SNAPSHOT)
+  if (incremental) {
+    db.exec(`ATTACH DATABASE '${SNAPSHOT.replace(/'/g, "''")}' AS old`)
+    const old = new DatabaseSync(SNAPSHOT, { readOnly: true })
+    if (schemaOf(old) !== schemaOf(db)) incremental = false
+    old.close()
+  }
+  const w = sqlWriter(file)
+  const tables = tablesOf(db)
+  if (incremental) {
+    for (const { t, cols, pk, where } of tables) {
+      const list = cols.join(', ')
+      const oldWhere = where.replace('WHERE', 'WHERE')
+      await w.insert(t, cols, db.prepare(`SELECT ${list} FROM main.${t} ${where} EXCEPT SELECT ${list} FROM old.${t} ${oldWhere}`).iterate(), { replace: true, pk })
+      const keys = pk.join(', ')
+      await w.remove(t, pk, db.prepare(`SELECT ${keys} FROM old.${t} ${oldWhere} EXCEPT SELECT ${keys} FROM main.${t} ${where}`).iterate())
     }
-    await flush()
+  } else {
+    for (const { t } of tables) await w.write(`DROP TABLE IF EXISTS ${t};\n`)
+    await w.write(readFileSync(SCHEMA, 'utf8').replace(/^--.*$/gm, '') + '\n')
+    for (const { t, cols, pk, where } of tables) await w.insert(t, cols, db.prepare(`SELECT ${cols.join(', ')} FROM ${t} ${where}`).iterate(), { pk })
   }
   // estadísticas para el planificador (sin ellas, las consultas con varios índices van muy lentas)
-  await write('PRAGMA optimize;\n')
-  await new Promise((res) => out.end(res))
+  await w.write('PRAGMA optimize;\n')
+  await w.end()
   db.close()
-  return { file, rows, bytes: statSync(file).size }
+  return { file, rows: w.rows, bytes: statSync(file).size, incremental }
+}
+
+/** Tras publicar, la copia de lo que hay en D1 (para la próxima publicación incremental). */
+function saveSnapshot() {
+  const db = new DatabaseSync(GEO_DB, { readOnly: true })
+  rmSync(SNAPSHOT, { force: true })
+  db.exec(`VACUUM INTO '${SNAPSHOT.replace(/'/g, "''")}'`)
+  db.close()
 }
 
 function wrangler(args, opts = {}) {
@@ -111,14 +193,17 @@ function ensureD1() {
   return db.uuid
 }
 
-async function publishD1(dry) {
+async function publishD1(dry, { full = false } = {}) {
   const t0 = Date.now()
-  const { file, rows, bytes } = await exportSql()
-  console.log(`[publish] SQL: ${rows} filas · ${(bytes / 1e6).toFixed(0)} MB → ${path.relative(ROOT, file)}`)
+  const { file, rows, bytes, incremental } = await exportSql(undefined, { full })
+  console.log(`[publish] SQL ${incremental ? 'incremental' : 'completo'}: ${rows} filas · ${(bytes / 1e6).toFixed(1)} MB → ${path.relative(ROOT, file)}`)
   if (dry) return
+  if (incremental && rows === 0) return console.log('[publish] D1 ya está al día')
   const id = ensureD1()
   console.log(`[publish] D1 ${D1_NAME} (${id}): cargando…`)
   wrangler(['d1', 'execute', D1_NAME, '--remote', '--yes', `--file=${file}`], { inherit: true })
+  saveSnapshot()
+  writeFileSync(API_VERSION, Date.now().toString(36))
   console.log(`[publish] ✓ D1 en ${((Date.now() - t0) / 60000).toFixed(1)} min`)
 }
 
@@ -170,6 +255,19 @@ const COMMUNITY = path.join(ROOT, 'public', 'community')
 // lo que ahora sirve la API (D1) o ya no usa la app
 const COMMUNITY_SKIP = [/^visual-index\.json$/, /^quiz\.json$/, /^(plonkit|geohints|geometas)\//]
 
+/** Versión de la base geográfica (fecha de construcción, en base 36). */
+// Versión de lo que hay en D1 (va en las URLs de la API como ?v=): cambia cada vez que una
+// publicación escribe filas. No basta con built_at: hay etapas (capas) que cambian la base
+// sin reconstruirla.
+const API_VERSION = path.join(WORK, 'd1-version.txt')
+function apiVersion() {
+  if (existsSync(API_VERSION)) return readFileSync(API_VERSION, 'utf8').trim()
+  const db = new DatabaseSync(GEO_DB, { readOnly: true })
+  const built = db.prepare("SELECT value FROM meta WHERE key = 'built_at'").get()?.value ?? new Date().toISOString()
+  db.close()
+  return Date.parse(built).toString(36)
+}
+
 async function publishCommunity(dry) {
   if (!existsSync(COMMUNITY)) return console.log('[publish] falta public/community (npm run pipeline -- export)')
   const ledgerFile = path.join(WORK, 'r2-community.json')
@@ -199,7 +297,10 @@ async function publishCommunity(dry) {
     }
   }))
   writeFileSync(ledgerFile, JSON.stringify(ledger))
-  // el manifiesto, al final: la app solo ve la versión nueva cuando ya está todo subido
+  // el manifiesto, al final: la app solo ve la versión nueva cuando ya está todo subido.
+  // `_api` = versión de la base publicada en D1: la app la añade a la API (?v=) para que
+  // el navegador guarde las respuestas hasta la próxima publicación
+  manifest._api = apiVersion()
   await put('community/manifest.json', Buffer.from(JSON.stringify(manifest)), 'application/json', 'public, max-age=60')
   console.log(`[publish] ✓ guías: ${done} archivos y el manifiesto`)
 }
@@ -207,8 +308,9 @@ async function publishCommunity(dry) {
 export async function publish(args) {
   const dry = args.includes('--dry')
   const what = args.filter((a) => !a.startsWith('--'))
-  if (!what.length || what.includes('d1')) await publishD1(dry)
+  if (!what.length || what.includes('d1')) await publishD1(dry, { full: args.includes('--full') })
   if (!what.length || what.includes('r2')) await publishR2(dry)
-  if (!what.length || what.includes('community')) await publishCommunity(dry)
+  // el manifiesto lleva la versión de D1: si se publica D1, también las guías (solo sube lo que cambió)
+  if (!what.length || what.includes('community') || what.includes('d1')) await publishCommunity(dry)
   if (!dry) console.log('[publish] para servirlo: cd worker && npx wrangler deploy')
 }

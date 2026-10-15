@@ -41,9 +41,11 @@ type Props = {
   defs?: (k: number) => React.ReactNode
   /** al tocar un país, en lugar de abrir su guía (todos los países se pueden elegir) */
   onSelect?: (c: CountryRow) => void
+  /** detalle inicial del contorno: 110m (ligero, el detallado se carga al acercar) o 50m */
+  detail?: '110m' | '50m'
 }
 
-export default function WorldMap({ countries, highlight, paint, card, legend, defs, onSelect }: Props) {
+export default function WorldMap({ countries, highlight, paint, card, legend, defs, onSelect, detail = '110m' }: Props) {
   const navigate = useNavigate()
   const svgRef = useRef<SVGSVGElement>(null)
   const gRef = useRef<SVGGElement>(null)
@@ -53,9 +55,15 @@ export default function WorldMap({ countries, highlight, paint, card, legend, de
   const [k, setK] = useState(1)
   const [region, setRegion] = useState<string>('')
 
+  // mapa ligero (110m, ~100 KB) para la vista general; el detallado (50m, ~750 KB) al acercar
+  const [res, setRes] = useState<'110m' | '50m'>(detail)
   useEffect(() => {
-    import('world-atlas/countries-50m.json').then((m) => setTopo(m.default as unknown as Topology))
-  }, [])
+    const load = res === '110m' ? import('world-atlas/countries-110m.json') : import('world-atlas/countries-50m.json')
+    load.then((m) => setTopo(m.default as unknown as Topology))
+  }, [res])
+  useEffect(() => {
+    if (res === '110m' && k >= 2.5) setRes('50m')
+  }, [k, res])
 
   const byNum = useMemo(() => new Map(countries.filter((c) => c.ccn3).map((c) => [String(Number(c.ccn3)), c])), [countries])
   // intensidad del acento por percentil de pistas: reparte los tonos aunque muchos países tengan cifras parecidas

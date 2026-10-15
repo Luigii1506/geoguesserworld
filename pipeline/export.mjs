@@ -1,7 +1,7 @@
 // Exporta desde la base SQLite lo que consume la app web:
 //   public/community/visual-index.json  → comparador visual (todas las fuentes)
 //   public/community/countries.json     → base global de países
-//   public/community/country/<cc>.json  → todas las pistas y atributos de un país
+//   public/community/country/<cc>.<es|en>.json → todas las pistas y atributos de un país, en cada idioma
 // Todo bajo public/community/ (fuera de git, uso personal).
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -263,10 +263,16 @@ export function exportAll(db) {
     inferRegions(clusters, byId, countryNames, { admin1: admin1[c.code] ?? [], dependents })
     for (const h of hints) delete h.upstream
     const resources = resStmt ? resStmt.all(c.code) : []
-    writeFileSync(
-      path.join(OUT, 'country', `${c.code}.json`),
-      JSON.stringify({ country: c, summaryImage: summaryImage(c.code), clusters, hints, attributes, resources }),
-    )
+    // una versión por idioma: cada pista con un solo texto (la traducción o, si no hay, el
+    // original). Sin esto cada pista viajaba tres veces (original, español e inglés)
+    rmSync(path.join(OUT, 'country', `${c.code}.json`), { force: true })
+    for (const lang of ['es', 'en']) {
+      const localized = hints.map(({ text_es, text_en, ...h }) => ({ ...h, text: (lang === 'es' ? text_es : text_en) ?? h.text }))
+      writeFileSync(
+        path.join(OUT, 'country', `${c.code}.${lang}.json`),
+        JSON.stringify({ country: c, summaryImage: summaryImage(c.code), clusters, hints: localized, attributes, resources }),
+      )
+    }
     files++
   }
 

@@ -2,7 +2,8 @@
 // y la API de geografía sobre D1. Solo para quien tenga la clave (uso personal).
 //
 //   GET /img/ab/<sha1>.webp?k=<clave>     imagen grande (1600 px)
-//   GET /thumb/ab/<sha1>.webp?k=<clave>   miniatura (480 px)
+//   GET /thumb/ab/<sha1>.webp?k=<clave>   miniatura (480 px); también .avif
+//   GET /sm/ab/<sha1>.webp?k=<clave>      miniatura pequeña (240 px, cuadrículas del móvil); también .avif
 //   GET /atlas/<ruta>?k=<clave>           capas de terreno y vectores por país (R2 atlas/…)
 //   GET /api/geo/…?k=<clave>              API de geografía (worker/src/geo/api.js, D1)
 //   GET|POST /api/gg/…?k=<clave>          API de las guías: explorador visual y sesiones de Entrenar
@@ -15,9 +16,9 @@
 
 import { handleApi } from './geo/router.js'
 
-const IMAGE = /^\/(img|thumb)\/[0-9a-f]{2}\/[0-9a-f]{40}\.webp$/
+const IMAGE = /^\/(img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(webp|avif)$/
 const GEO_ASSET = /^\/(atlas|community)\/[a-z0-9_./-]+\.(webp|png|json)$/
-const TYPES = { webp: 'image/webp', png: 'image/png', json: 'application/json' }
+const TYPES = { webp: 'image/webp', avif: 'image/avif', png: 'image/png', json: 'application/json' }
 
 function same(a, b) {
   // comparación en tiempo constante
@@ -86,7 +87,7 @@ export default {
     if (!env.ACCESS_KEY || !same(key, env.ACCESS_KEY)) return new Response('Forbidden', { status: 403 })
 
     if (isImage || isAsset) {
-      const type = isImage ? 'image/webp' : TYPES[url.pathname.split('.').pop()]
+      const type = TYPES[url.pathname.split('.').pop()]
       // con huella en el nombre (x.3f2a9c1b.json) no cambian nunca; el manifiesto, cada minuto
       // public: también se guarda en el borde de Cloudflare (la clave se comprueba antes de mirar la caché)
       const cache = url.pathname === '/community/manifest.json' ? 'public, max-age=60'
@@ -97,12 +98,22 @@ export default {
     if (!env.GEO) return Response.json({ error: 'sin base de geografía' }, { status: 503 })
     const db = d1(env.GEO)
     const usage = () => ({ 'x-d1-rows-read': String(db.stats.rows), 'x-d1-queries': String(db.stats.queries), 'access-control-expose-headers': 'x-d1-rows-read, x-d1-queries' })
+    // si D1 falla (p. ej. cuota diaria agotada) se responde 503 con el motivo, sin caché,
+    // en lugar de dejar que el Worker reviente (error 1101 sin CORS que la app no puede leer)
+    const api = async (body) => {
+      try {
+        return await handleApi(db, url, body)
+      } catch (e) {
+        const quota = /limit|7500/i.test(String(e?.message))
+        return { status: 503, body: { error: quota ? 'cuota diaria de D1 agotada' : 'error de la base de datos' } }
+      }
+    }
     if (isPost) {
-      const { status, body } = await handleApi(db, url, await request.text())
+      const { status, body } = await api(await request.text())
       return Response.json(body, { status, headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store', ...usage() } })
     }
     return cached(request, url, ctx, async () => {
-      const { status, body } = await handleApi(db, url)
+      const { status, body } = await api()
       return Response.json(body, {
         status,
         headers: {
@@ -110,7 +121,8 @@ export default {
           'access-control-allow-origin': '*',
           // los datos cambian solo al publicar: una hora en el navegador y en el borde (compartida:
           // dos personas que piden lo mismo leen D1 una sola vez)
-          'cache-control': status === 200 ? 'public, max-age=3600' : 'no-store',
+          // con ?v=<versión de la base> la respuesta no cambia nunca (la versión cambia al publicar)
+          'cache-control': status !== 200 ? 'no-store' : url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
         },
       })
     })

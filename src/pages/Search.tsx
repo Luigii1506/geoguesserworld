@@ -6,6 +6,7 @@ import { imageSrc } from '../lib/images'
 import { firstSentence, useGuide } from '../lib/guide'
 import { hintText, useLang } from '../lib/i18n'
 import { Lightbox, Loading, MissingData } from '../components/ui'
+import { Img } from '../components/Img'
 
 // Buscar: "¿dónde estoy?" a partir de lo que ves. Marcas cada pista visual
 // (conducción, escritura, líneas, bolardo, poste, matrícula, señales, coche…)
@@ -142,7 +143,7 @@ function CountryWall({ code, type, onType }: { code: string; type: string; onTyp
             const text = firstSentence(hintText(g.hints.get(c.canonical_id)!, lang), 320)
             return (
               <button key={c.id} className="sx-tile" onClick={() => setBox({ images: imgs, caption: `${c.region ? `${c.region} · ` : ''}${text}` })}>
-                <img src={imageSrc(imgs[0], 'thumb')} alt="" loading="lazy" />
+                <Img src={imgs[0]} />
                 <span className="sx-tile-cap">{c.region ?? 'Todo el país'}</span>
               </button>
             )
@@ -372,7 +373,7 @@ export default function Search() {
         <div className="sx-imgs">
           {r.imgs.slice(0, 3).map((x) => (
             <button key={x.img} className="sx-img" onClick={() => setBox({ images: r.imgs.map((y) => y.img), caption: `${r.c.flag} ${r.c.name_es ?? r.c.name}` })}>
-              <img src={imageSrc(x.img, 'thumb')} alt="" loading="lazy" />
+              <Img src={x.img} />
               <span>{x.label}</span>
             </button>
           ))}
@@ -473,7 +474,7 @@ export default function Search() {
             <>
               {visual.map((o) => (
                 <button key={o.id} className="sx-thumb" onClick={() => pickPhoto(o)} aria-label={`Quitar ${TYPE_LABEL[o.type]}`}>
-                  <img src={imageSrc(o.img!, 'thumb')} alt="" />
+                  <Img src={o.img!} loading="eager" />
                   <span>{VTYPE.get(o.type)?.label} ×</span>
                 </button>
               ))}
@@ -539,7 +540,7 @@ export default function Search() {
             <div className="sx-wall">
               {wall.slice(0, wallMore ? undefined : WALL).map((o) => (
                 <button key={o.id} className={`sx-tile ${chosen(wallType)?.id === o.id ? 'on' : ''}`} onClick={() => pickPhoto(o)}>
-                  <img src={imageSrc(o.img!, 'thumb')} alt="" loading="lazy" />
+                  <Img src={o.img!} />
                   <span className="sx-tile-cap">
                     {countries.find((c) => c.code === o.country)?.flag} {o.region ?? (o.variant !== 'main' ? VARIANT_NOTE[o.variant] : '')}
                   </span>

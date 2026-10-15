@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { geo, type GeoCard, type GeoCountryRow } from '../../lib/geo'
 import { factLine, kindLabel } from '../../lib/geoFormat'
+import { Img } from '../Img'
 
 // Buscador único de Geografía: mientras escribes sugiere países y lugares;
 // Enter busca el texto en toda la base. Teclado: flechas, Enter y Escape.
@@ -106,7 +107,7 @@ export function Omnibox({ countries, value, onSearch, onCountry, onPlace, placeh
                   </>
                 ) : it.type === 'place' ? (
                   <>
-                    <span className="omni-thumb">{it.p.thumb ? <img src={it.p.thumb} alt="" loading="lazy" /> : null}</span>
+                    <span className="omni-thumb">{it.p.thumb ? <Img src={it.p.thumb} sizes="40px" /> : null}</span>
                     <span className="omni-main">
                       <strong>{it.p.name}</strong>
                       <em>{kindLabel(it.p.kind)} · {flag(it.p.cc)} {countries.find((c) => c.cc === it.p.cc)?.name ?? ''}{factLine(it.p.kind, it.p.facts) ? ` · ${factLine(it.p.kind, it.p.facts)}` : ''}</em>

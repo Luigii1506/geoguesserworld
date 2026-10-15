@@ -9,6 +9,7 @@ import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, USEFULNESS, VARIANT_LABEL, attrL
 import { imageSrc } from '../lib/images'
 import { geo, useGeo } from '../lib/geo'
 import { entityMetrics, kindCount, kindLabel } from '../lib/geoFormat'
+import { Img } from './Img'
 
 export function CountryChip({ code, map, to }: { code: string; map: Map<string, CountryRow>; to?: string }) {
   return (
@@ -118,7 +119,7 @@ export function Gallery({ images, limit = 12, min, strip }: { images: string[]; 
       >
         {shown.map((src, i) => (
           <button key={src} className="shot" onClick={() => setBox(i)} aria-label="Ampliar imagen">
-            <img src={imageSrc(src, strip && images.length === 1 ? 'img' : 'thumb')} loading="lazy" alt="" onError={hideBroken} />
+            <Img src={src} size={strip && images.length === 1 ? 'img' : 'thumb'} onError={hideBroken} />
           </button>
         ))}
         {!all && images.length > limit && (
@@ -234,7 +235,7 @@ export function PhotoTiles({ items, limit = 12 }: { items: { image: string; capt
         {shown.map((it, i) => (
           <figure key={it.image} className="tile">
             <button className="shot" onClick={() => setBox(i)} aria-label="Ampliar imagen">
-              <img src={imageSrc(it.image, 'thumb')} loading="lazy" alt={it.caption ?? ''} onError={(e) => hideBroken(e, '.tile')} />
+              <Img src={it.image} alt={it.caption ?? ''} onError={(e) => hideBroken(e, '.tile')} />
             </button>
             {it.sv && (
               <button className="tile-sv" onClick={() => setSvAt(i)} aria-label="Ver en Street View">
@@ -673,7 +674,7 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
           <div className="pm-top">
             {wiki?.image && (
               <button className="pm-photo" onClick={() => setPhoto(wiki.image)} aria-label="Ampliar foto">
-                <img src={wiki.image} alt={wiki.title} />
+                <Img src={wiki.image} size="img" sizes="(max-width: 700px) 92vw, 420px" loading="eager" alt={wiki.title} />
               </button>
             )}
             <div className="pm-mapwrap">
@@ -722,7 +723,7 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
                 <div key={h.id} className="pm-hint">
                   {h.images[0] && (
                     <button className="pm-hint-img" onClick={() => setPhoto(h.images[0])} aria-label="Ampliar">
-                      <img src={imageSrc(h.images[0], 'thumb')} alt="" loading="lazy" />
+                      <Img src={h.images[0]} sizes="96px" />
                     </button>
                   )}
                   <div>

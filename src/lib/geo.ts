@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import KINDS from '../../geo/kinds.json'
+import { publishedManifest } from './data'
 
 // Cliente de la API de geografía (/api/geo/…, ver docs/geo.md).
 //   · `npm run dev`: la sirve Vite sobre data/geo.db (mismo origen)
@@ -176,11 +177,15 @@ export function geoFetch<T>(path: string): Promise<T> {
   return apiGet<T>(`geo/${path}`)
 }
 
-/** GET a la API con caché en memoria (la misma URL se pide una sola vez por sesión). */
+/**
+ * GET a la API con caché en memoria (la misma URL se pide una sola vez por sesión). En
+ * producción lleva la versión de la base publicada (?v=): el navegador guarda la respuesta
+ * hasta la próxima publicación, así que repetir una visita no descarga nada.
+ */
 export function apiGet<T>(path: string): Promise<T> {
   const url = apiUrl(path)
   if (!cache.has(url)) {
-    const p = fetch(url).then(async (r) => {
+    const p = publishedManifest().then((m) => fetch(m._api ? `${url}${url.includes('?') ? '&' : '?'}v=${m._api}` : url)).then(async (r) => {
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `HTTP ${r.status}`)
       return r.json()
     })

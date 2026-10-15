@@ -1612,3 +1612,8 @@ a.chip:hover, button.chip:hover { border-color: var(--ink-3); color: var(--ink);
   .geo-type, .geo-unesco, .geo-vs { font-size: 0.56rem !important; padding: 0.1rem 0.4rem !important; letter-spacing: 0.04em; }
   .geo-fact { font-size: 0.68rem; }
 }
+/* imágenes: aparecen con un fundido al cargar (sin saltos bruscos) */
+.img-fade { opacity: 0; transition: opacity 0.35s ease; }
+.img-fade.is-loaded { opacity: 1; }
+picture { display: contents; }
+.page-loading { min-height: 60vh; }

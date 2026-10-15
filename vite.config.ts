@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, normalize } from 'node:path'
@@ -75,14 +76,14 @@ function plonkitImages(): Plugin {
 const OWN_DIR = join(process.cwd(), 'data/images')
 function ownImages(): Plugin {
   const handler = (req: { url?: string }, res: import('node:http').ServerResponse, next: () => void) => {
-    const m = req.url?.match(/^\/images\/((?:img|thumb)\/[0-9a-f]{2}\/[0-9a-f]{40}\.webp)/)
+    const m = req.url?.match(/^\/images\/((?:img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(?:webp|avif))/)
     if (!m) return next()
     const file = join(OWN_DIR, m[1])
     if (!existsSync(file)) {
       res.statusCode = 404
       return res.end()
     }
-    res.setHeader('content-type', 'image/webp')
+    res.setHeader('content-type', file.endsWith('.avif') ? 'image/avif' : 'image/webp')
     res.setHeader('cache-control', 'public, max-age=31536000, immutable')
     res.end(readFileSync(file))
   }
@@ -159,8 +160,79 @@ function geoApi(): Plugin {
   }
 }
 
+// PWA: la app (JS, CSS, fuentes) queda precacheada y abre al instante, también sin red.
+// Los datos se guardan al usarlos, según cómo cambian:
+//   · con huella o versión (API ?v=, capas ?v=, community/<ruta>.<hash>.json): cache-first,
+//     nunca cambian; una publicación nueva trae otras URLs
+//   · community/manifest.json y la API sin versión: red primero, caché si no hay red
+//   · Entrenar (POST) no pasa por la caché
+// Las imágenes (<img> de otro origen, respuestas opacas) se quedan en la caché HTTP del
+// navegador, que ya las guarda un año: en la del service worker ocuparían ~7 MB cada una.
+const path = (url: URL) => url.pathname
+const versioned = (url: URL) => url.searchParams.has('v')
+const days = (n: number) => n * 86400
+const pwa = VitePWA({
+  registerType: 'autoUpdate',
+  includeAssets: ['icons/icon.svg', 'icons/apple-touch-icon.png'],
+  manifest: {
+    name: 'GeoMastery',
+    short_name: 'GeoMastery',
+    description: 'Academia personal de reconocimiento geográfico para GeoGuessr',
+    lang: 'es',
+    start_url: '.',
+    scope: '.',
+    display: 'standalone',
+    theme_color: '#1f6b55',
+    background_color: '#f7f6f2',
+    icons: [
+      { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  },
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
+    // el mapa a 50 m (750 KB) solo se pide al hacer zoom: se guarda la primera vez que se usa
+    globIgnores: ['community/**', 'images/**', 'assets/countries-50m-*.js'],
+    navigateFallback: 'index.html',
+    cleanupOutdatedCaches: true,
+    runtimeCaching: [
+      {
+        urlPattern: ({ url, sameOrigin }) => sameOrigin && path(url).startsWith('/assets/'),
+        handler: 'CacheFirst',
+        options: { cacheName: 'assets', expiration: { maxEntries: 20 }, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && versioned(url),
+        handler: 'CacheFirst',
+        options: { cacheName: 'api', expiration: { maxEntries: 800, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/'),
+        handler: 'NetworkFirst',
+        options: { cacheName: 'api-live', networkTimeoutSeconds: 4, expiration: { maxEntries: 200, maxAgeSeconds: days(7) }, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url }) => path(url).endsWith('/community/manifest.json'),
+        handler: 'NetworkFirst',
+        options: { cacheName: 'community-manifest', networkTimeoutSeconds: 3, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url }) => path(url).startsWith('/community/'),
+        handler: 'CacheFirst',
+        options: { cacheName: 'community', expiration: { maxEntries: 400, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
+      },
+      {
+        urlPattern: ({ url }) => path(url).startsWith('/atlas/') && path(url).endsWith('.json') && versioned(url),
+        handler: 'CacheFirst',
+        options: { cacheName: 'atlas', expiration: { maxEntries: 300, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
+      },
+    ],
+  },
+})
+
 export default defineConfig({
-  plugins: [react(), ownImages(), plonkitImages(), geoApi()],
+  plugins: [react(), ownImages(), plonkitImages(), geoApi(), pwa],
   server: { port: 5173 },
   preview: { port: 4173 },
 })

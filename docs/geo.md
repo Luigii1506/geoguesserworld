@@ -72,7 +72,7 @@ npm run pipeline -- geo download wikidata-enrich       fama, fotos, artículos y
 npm run pipeline -- geo download wikipedia             resúmenes de los artículos nuevos (caché)
 npm run pipeline -- geo download resolve               nombres en español de las ecorregiones (DeepSeek, caché)
 npm run pipeline -- geo layers [capa…] [--countries mx,ch] [--no-stats] [--no-render]
-npm run pipeline -- geo publish [d1|r2] [--dry]        D1 + R2; luego: cd worker && npx wrangler deploy
+npm run pipeline -- geo publish [d1|r2] [--dry] [--full]   D1 + R2; luego: cd worker && npx wrangler deploy
 ```
 
 Orden tras añadir una fuente: `geo build` → `geo download wikidata-enrich` →
@@ -151,6 +151,21 @@ npm run pipeline -- geo publish d1 community   D1 y R2 (community/ con huella y 
 Las claves de `gg_quiz` son las del progreso del usuario (`t:<id>`, `p:<id>:<imagen>`):
 cambiar de cómo se elige no hace perder el repaso. Con usuarios en Neon, la sesión podrá
 leer el progreso en el servidor en lugar de recibirlo en el cuerpo.
+
+### Publicar en D1 sin gastar escrituras
+
+D1 gratis permite 100 000 filas escritas al día y la base tiene ~3,3 M. Tras cada
+publicación se guarda una copia de lo publicado (`data/geo-work/d1-published.db`); la
+siguiente compara tabla a tabla (`EXCEPT`) y envía solo las filas nuevas o cambiadas
+(`INSERT OR REPLACE`) y las borradas (`DELETE`). Si cambia el esquema, o con `--full`,
+se borra y recarga todo. Con `--dry` se ve cuántas filas iría a escribir.
+
+### Caché en el navegador (PWA)
+
+La app se instala como PWA (`vite-plugin-pwa`, ver `vite.config.ts`): JS, CSS y fuentes
+quedan precacheados. Lo que lleva huella o versión (API `?v=`, capas `?v=`,
+`community/<ruta>.<hash>.json`) se guarda cache-first: nunca cambia, una publicación nueva
+trae otras URLs. `community/manifest.json` va red primero, con caché sin conexión.
 
 ## Fuentes
 

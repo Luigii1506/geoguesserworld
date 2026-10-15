@@ -1,5 +1,6 @@
 import type { GeoCard, GeoCountryRow } from '../../lib/geo'
 import { SORT, TAG_LABEL, factLine, kindLabel, volcanoStatus } from '../../lib/geoFormat'
+import { Img } from '../Img'
 
 // Tarjeta de galería y fila de ranking de un lugar de la base geográfica.
 
@@ -17,7 +18,7 @@ export function GeoCardView({ c, countries, rank, onOpen }: { c: GeoCard; countr
   return (
     <button className={`geo-card ${c.thumb ? '' : 'noimg'}`} onClick={() => onOpen(c)}>
       <div className="geo-img">
-        {c.thumb ? <img src={c.thumb} alt="" loading="lazy" /> : <span>{kindLabel(c.kind)}</span>}
+        {c.thumb ? <Img src={c.thumb} /> : <span>{kindLabel(c.kind)}</span>}
         {rank ? <em className="geo-rank">{rank}</em> : <em className="geo-type">{kindLabel(c.kind)}</em>}
         {c.tags?.includes('unesco') && !rank ? <em className="geo-unesco">UNESCO</em> : null}
         {status ? <em className={`geo-vs geo-vs-${status}`}>{TAG_LABEL.get(status)}</em> : null}
@@ -46,7 +47,7 @@ export function GeoRow({ c, countries, n, sort, max, onOpen }: {
     <li>
       <button className="geo-row" onClick={() => onOpen(c)}>
         <span className="geo-row-n">{n ?? '–'}</span>
-        <span className="geo-row-img">{c.thumb ? <img src={c.thumb} alt="" loading="lazy" /> : null}</span>
+        <span className="geo-row-img">{c.thumb ? <Img src={c.thumb} sizes="64px" /> : null}</span>
         <span className="geo-row-main">
           <strong>{c.name}</strong>
           <span>{where(c, countries)} · {kindLabel(c.kind)}{c.tags?.includes('unesco') ? ' · UNESCO' : ''}</span>

@@ -7,9 +7,9 @@
 import { handleGeo } from './api.js'
 import { handleGuides } from './gg.js'
 
-/** Ruta de caché de una petición (sin /api/), o null si lleva parámetros (la clave k y t no cuentan). */
+/** Ruta de caché de una petición (sin /api/), o null si lleva parámetros (la clave k, t y la versión v no cuentan). */
 export function cachePath(url) {
-  for (const [k] of url.searchParams) if (k !== 'k' && k !== 't') return null
+  for (const [k] of url.searchParams) if (k !== 'k' && k !== 't' && k !== 'v') return null
   return url.pathname.replace(/^\/api\//, '')
 }
 

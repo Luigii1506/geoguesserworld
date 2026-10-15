@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLang } from './i18n'
 
 // Acceso a la base de conocimiento exportada por el pipeline
 // (public/community/, fuera de git). Cada archivo se pide una sola vez.
@@ -172,13 +173,18 @@ const REMOTE = env.DEV ? '' : ((env.VITE_API_BASE as string | undefined) ?? (env
 const KEY = env.VITE_IMAGE_KEY as string | undefined
 const withKey = (url: string) => (KEY ? `${url}${url.includes('?') ? '&' : '?'}k=${encodeURIComponent(KEY)}` : url)
 let manifest: Promise<Record<string, string>> | null = null
-async function communityUrl(path: string): Promise<string> {
-  if (!REMOTE) return `/community/${path}`
-  // el manifiesto se pide sin caché larga: es lo único que cambia al publicar
+/** Manifiesto de la publicación: ruta → versión con huella, y `_api` (versión de la base de la API). */
+export function publishedManifest(): Promise<Record<string, string>> {
+  if (!REMOTE) return Promise.resolve({})
+  // se pide sin caché larga: es lo único que cambia al publicar
   manifest ??= fetch(withKey(`${REMOTE}/community/manifest.json`))
     .then((r) => (r.ok ? r.json() : {}))
     .catch(() => ({}))
-  const files = await manifest
+  return manifest
+}
+async function communityUrl(path: string): Promise<string> {
+  if (!REMOTE) return `/community/${path}`
+  const files = await publishedManifest()
   return withKey(`${REMOTE}/community/${files[path] ?? path}`)
 }
 
@@ -215,7 +221,11 @@ export function useJson<T>(url: string | null): T | null | undefined {
 
 export const useCountries = () => useJson<CountryRow[]>('/community/countries.json')
 export const useMeta = () => useJson<MetaFile>('/community/meta.json')
-export const useCountryFile = (cc: string | undefined) => useJson<CountryFile>(cc ? `/community/country/${cc}.json` : null)
+/** Guía de un país en el idioma elegido (cada pista trae su texto ya traducido). */
+export const useCountryFile = (cc: string | undefined) => {
+  const lang = useLang()
+  return useJson<CountryFile>(cc ? `/community/country/${cc}.${lang}.json` : null)
+}
 export const useMetaObjects = () => useJson<MetaObjectsFile>('/community/meta-objects.json')
 /** Objetos de meta de un país y los contadores de sus rasgos (pocos KB). */
 export const useCountryObjects = (cc: string | undefined) =>

@@ -11,6 +11,7 @@ import { CountryAtlas } from '../components/geo/CountryAtlas'
 import { Omnibox } from '../components/geo/Omnibox'
 import { Strip } from '../components/geo/Strip'
 import { Sheet } from '../components/geo/Sheet'
+import { Img } from '../components/Img'
 
 const WorldMap = lazy(() => import('../components/WorldMap'))
 
@@ -97,7 +98,7 @@ function FamilyTile({ id, label, n, onPick }: { id: string; label: string; n: nu
   const img = data?.items[0]?.thumb
   return (
     <button className="ftile" onClick={() => onPick(id)}>
-      {img ? <img src={img} alt="" loading="lazy" /> : <span className="ftile-ph" />}
+      {img ? <Img src={img} sizes="(max-width: 600px) 46vw, 220px" /> : <span className="ftile-ph" />}
       <span className="ftile-text">
         <strong>{label}</strong>
         <em>{nf(n)}</em>
