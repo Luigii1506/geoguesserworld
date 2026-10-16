@@ -1877,8 +1877,10 @@ kbd {
 /* ── entrenar: tres formas de practicar ── */
 .back-link { display: inline-block; margin-bottom: 0.8rem; font-size: 0.9rem; color: var(--ink-2); }
 .train-choices { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0.9rem; margin-bottom: 1.4rem; }
-.train-choice { min-width: 0; }
-.train-choice .select { max-width: 100%; }
+.train-choice { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+/* el selector de país del examen: su ancho natural (el país de nombre más largo) no debe
+   ensanchar la tarjeta; ocupa lo que haya y el botón va a su lado o debajo */
+.train-choice .row > .select { flex: 1 1 180px; min-width: 0; width: 100%; max-width: 100%; }
 .train-choice { display: grid; gap: 0.6rem; align-content: start; padding: 1.2rem 1.3rem; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
 .train-choice h2 { font-size: 1.3rem; margin: 0; }
 .train-choice p { margin: 0; color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; }
