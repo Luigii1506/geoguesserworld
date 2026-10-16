@@ -52,14 +52,14 @@ export default function Countries() {
         {mode === 'list' && (
         <>
         <div className="seg">
+          <button className={order === 'rich' ? 'on' : ''} onClick={() => setOrder('rich')}>Más pistas</button>
+          <button className={order === 'name' ? 'on' : ''} onClick={() => setOrder('name')}>A–Z</button>
+        </div>
+        <div className="seg">
           <button className={!region ? 'on' : ''} onClick={() => setRegion('')}>Todos</button>
           {REGIONS.map((r) => (
             <button key={r} className={region === r ? 'on' : ''} onClick={() => setRegion(r)}>{REGION_ES[r]}</button>
           ))}
-        </div>
-        <div className="seg">
-          <button className={order === 'rich' ? 'on' : ''} onClick={() => setOrder('rich')}>Más pistas</button>
-          <button className={order === 'name' ? 'on' : ''} onClick={() => setOrder('name')}>A–Z</button>
         </div>
         </>
         )}

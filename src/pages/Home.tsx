@@ -1,96 +1,182 @@
-import { Link } from 'react-router-dom'
-import { useMeta } from '../lib/data'
-import { useStudy } from '../lib/study/store'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { countryFlag, countryLabel, useCountries, useCountryMap, useJson, useMeta, type CountryRow } from '../lib/data'
+import { geo, useGeo } from '../lib/geo'
+import { guides } from '../lib/guides'
+import { Img } from '../components/Img'
 import { dueCount, scopeCounts } from '../lib/study/cards'
 import { masteryByCountry, reviewsToday, streak } from '../lib/study/stats'
-import { savedItems, type StudyState } from '../lib/study/store'
-import { countryFlag, countryLabel, useCountryMap } from '../lib/data'
+import { savedItems, useStudy, type StudyState } from '../lib/study/store'
 
-// Marco StoryBrand (Donald Miller): el jugador es el héroe, GeoMastery el guía,
-// un plan de tres pasos y una sola acción principal.
+// Inicio: un punto de partida, no una presentación. Si ya estudias, lo de hoy; después, ir
+// directo a un país, las secciones con su imagen, por qué países empezar, los gemelos más
+// famosos y el método en tres pasos. Todo sale de datos en caché (casi no lee la base).
 
 const fmt = (n: number | undefined) => (n ?? 0).toLocaleString('es')
+type DuelIndex = { a: string; b: string; score: number; headline: string | null; diffs: number }[]
 
 export default function Home() {
   const meta = useMeta()
   const study = useStudy()
+  const countries = useCountries()
   const t = meta?.totals
-  const keys = Object.keys(study.cards)
+  const started = Object.keys(study.cards).length > 0
   const due = dueCount(study)
 
-  const primary =
-    keys.length === 0
-      ? { to: '/entrenar', label: 'Empieza a entrenar' }
-      : { to: '/entrenar', label: due > 0 ? `Repasar ${due} pendientes` : 'Seguir entrenando' }
-
   return (
-    <div>
-      {study.ready && keys.length > 0 && <Today s={study} due={due} />}
-      <section className="hero">
+    <div className="home">
+      {study.ready && started && <Today s={study} due={due} />}
+
+      <section className="home-hero">
         <span className="eyebrow">GeoGuessr, con método</span>
-        <h1>Reconoce el país en segundos, no en minutos.</h1>
-        <p className="lead">
-          Las pistas de las seis grandes guías de la comunidad, sin duplicados, traducidas y ordenadas por lo que de verdad
-          te ubica. Estudia lo esencial, compara lo que se confunde y entrena hasta reconocerlo solo.
-        </p>
+        <h1>Reconoce el país en segundos.</h1>
+        <p className="lead">Las pistas de las seis grandes guías, sin duplicados y ordenadas por lo que de verdad te ubica.</p>
+        <CountryJump countries={countries ?? []} />
         <div className="hero-actions">
-          <Link to={primary.to} className="btn btn-primary btn-lg">{primary.label}</Link>
-          <Link to="/paises" className="btn btn-lg">Explorar países</Link>
+          <Link to="/entrenar" className="btn btn-primary btn-lg">{started ? (due > 0 ? `Repasar ${due}` : 'Seguir entrenando') : 'Empieza a entrenar'}</Link>
+          <Link to="/paises" className="btn btn-lg">Ver países</Link>
         </div>
       </section>
 
-      <div className="stat-line">
-        <div><strong>{fmt(t?.groups)}</strong><span>pistas únicas</span></div>
-        <div><strong>{fmt(t?.essential)}</strong><span>determinantes</span></div>
-        <div><strong>{fmt(t?.images)}</strong><span>imágenes</span></div>
-        <div><strong>{fmt(t?.countries)}</strong><span>países</span></div>
-      </div>
+      <Sections />
+      <StartWith countries={countries ?? []} />
+      <FamousTwins />
 
-      <section className="home-section">
-        <span className="eyebrow">Por qué cuesta</span>
-        <div className="three">
-          <div>
-            <h3>Los países gemelos</h3>
-            <p>Hungría o Rumanía, Suecia o Finlandia, Uruguay o Argentina. Los puntos se pierden en la última decisión.</p>
-          </div>
-          <div>
-            <h3>Demasiada información suelta</h3>
-            <p>Miles de consejos repartidos en guías y hojas de cálculo, repetidos y sin decir cuáles importan.</p>
-          </div>
-          <div>
-            <h3>Memorizar al azar no funciona</h3>
-            <p>Reconocer un país es una habilidad. Se aprende con orden y se fija repasando a tiempo.</p>
-          </div>
-        </div>
+      <section className="home-block">
+        <h2>El método</h2>
+        <ol className="home-steps">
+          <li><strong>Estudia lo esencial</strong><span>Cada país empieza por las pistas que por sí solas te dicen dónde estás.</span></li>
+          <li><strong>Distingue a los gemelos</strong><span>Hungría o Rumanía, Uruguay o Argentina: los duelos enseñan la diferencia en fotos.</span></li>
+          <li><strong>Repasa a tiempo</strong><span>Guarda lo que quieras aprender; lo que fallas vuelve pronto y lo que dominas, más tarde.</span></li>
+        </ol>
       </section>
 
-      <section className="home-section">
-        <span className="eyebrow">El plan</span>
-        <div className="three steps">
-          <div>
-            <h3>Estudia lo esencial</h3>
-            <p>Cada país empieza por sus pistas determinantes: las que por sí solas te dicen dónde estás.</p>
-            <Link to="/paises">Ir a países</Link>
-          </div>
-          <div>
-            <h3>Distingue a los gemelos</h3>
-            <p>Duelos en fotos entre los países que se confunden, con la clave en una frase y un quiz de dos minutos.</p>
-            <Link to="/duelo">Duelos</Link>
-          </div>
-          <div>
-            <h3>Entrena hasta reconocerlo</h3>
-            <p>Preguntas con países que se confunden de verdad. Lo que fallas vuelve pronto; lo que dominas, más tarde.</p>
-            <Link to="/entrenar">Entrenar</Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="closing">
-        <h2>Ves un bolardo y sabes qué países quedan.</h2>
-        <p className="lead">Ese es el objetivo. Empieza por diez preguntas.</p>
-        <Link to="/entrenar" className="btn btn-primary btn-lg">Empieza a entrenar</Link>
-      </section>
+      <p className="home-stats">
+        <span><strong>{fmt(t?.groups)}</strong> pistas</span>
+        <span><strong>{fmt(t?.essential)}</strong> determinantes</span>
+        <span><strong>{fmt(t?.images)}</strong> imágenes</span>
+        <span><strong>{fmt(t?.countries)}</strong> países</span>
+      </p>
     </div>
+  )
+}
+
+/** Escribe un país y ve directo a su guía. */
+function CountryJump({ countries }: { countries: CountryRow[] }) {
+  const navigate = useNavigate()
+  const [q, setQ] = useState('')
+  const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+  const hits = useMemo(() => {
+    const n = fold(q.trim())
+    if (!n) return []
+    return countries
+      .filter((c) => c.groups > 0 && (fold(c.name_es ?? '').startsWith(n) || fold(c.name).startsWith(n) || fold(c.name_es ?? c.name).includes(n)))
+      .sort((a, b) => b.groups - a.groups)
+      .slice(0, 6)
+  }, [q, countries])
+  return (
+    <div className="home-jump">
+      <input
+        className="input"
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && hits[0] && navigate(`/pais/${hits[0].code}`)}
+        placeholder="Ir a un país: Hungría, Kenia, Chile…"
+        aria-label="Ir a un país"
+      />
+      {hits.length > 0 && (
+        <div className="home-jump-list">
+          {hits.map((c) => (
+            <Link key={c.code} to={`/pais/${c.code}`}>
+              <span className="flag">{c.flag}</span> {c.name_es ?? c.name}
+              <span className="muted small">{c.groups} pistas</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Las secciones de la app, cada una con su imagen. */
+function Sections() {
+  // imágenes de ejemplo (respuestas en caché: una fila cada una)
+  const mountain = useGeo('home-tile-montanas', () => geo.list({ family: 'montanas', photo: true, famous: true, sort: 'rank', limit: 1 }))
+  const bollard = useGeo('home-tile-bolardo', () => guides.visual({ cat: 'bollards', cc: 'hu', limit: 1 }))
+  const sign = useGeo('home-tile-senal', () => guides.visual({ cat: 'signs', cc: 'cz', limit: 1 }))
+  const items: { to: string; title: string; text: string; img?: string; art?: string }[] = [
+    { to: '/paises', title: 'Países', text: 'La guía de cada país, tema por tema', art: '🇭🇺🇯🇵🇧🇷🇰🇪🇨🇱🇮🇳🇿🇦🇳🇴' },
+    { to: '/catalogo', title: 'Catálogo', text: 'Bolardos, postes, matrículas… de todo el mundo', img: bollard.data?.items[0]?.i },
+    { to: '/duelo', title: 'Duelos', text: 'Los países que se confunden, foto contra foto', art: '🇭🇺 vs 🇸🇰' },
+    { to: '/geografia', title: 'Geografía', text: 'Volcanes, ríos, ciudades y su terreno', img: mountain.data?.items[0]?.thumb },
+    { to: '/buscar', title: '¿Dónde estoy?', text: 'Elige lo que ves y descarta países', img: sign.data?.items[0]?.i, art: '🔎' },
+    { to: '/mapas', title: 'Mapas', text: 'Conducción, idiomas, líneas… en el mundo', art: '🗺️' },
+  ]
+  return (
+    <section className="home-block">
+      <div className="home-tiles">
+        {items.map((it) => (
+          <Link key={it.to} to={it.to} className="home-tile">
+            <span className="home-tile-img">
+              {it.img ? <Img src={it.img} sizes="(max-width: 600px) 46vw, 260px" /> : <span className="home-tile-art">{it.art}</span>}
+            </span>
+            <span className="home-tile-body">
+              <strong>{it.title}</strong>
+              <span>{it.text}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** Por qué países empezar: los que más pistas tienen. */
+function StartWith({ countries }: { countries: CountryRow[] }) {
+  const top = useMemo(() => [...countries].filter((c) => c.groups > 0).sort((a, b) => b.groups - a.groups).slice(0, 12), [countries])
+  if (!top.length) return null
+  return (
+    <section className="home-block">
+      <div className="home-block-head">
+        <h2>Empieza por</h2>
+        <Link to="/paises">Todos los países →</Link>
+      </div>
+      <div className="home-row">
+        {top.map((c) => (
+          <Link key={c.code} to={`/pais/${c.code}`} className="home-country">
+            <span className="flag">{c.flag}</span>
+            <strong>{c.name_es ?? c.name}</strong>
+            <span className="muted small">{c.essential} determinantes</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** Los gemelos más famosos (los que más se confunden), con la clave en una frase. */
+function FamousTwins() {
+  const index = useJson<DuelIndex>('/community/duels.json')
+  const map = useCountryMap()
+  const top = useMemo(() => [...(index ?? [])].filter((d) => d.headline).sort((a, b) => b.score - a.score || b.diffs - a.diffs).slice(0, 6), [index])
+  if (!top.length || !map.size) return null
+  return (
+    <section className="home-block">
+      <div className="home-block-head">
+        <h2>Gemelos famosos</h2>
+        <Link to="/duelo">Todos los duelos →</Link>
+      </div>
+      <div className="home-row">
+        {top.map((d) => (
+          <Link key={`${d.a}_${d.b}`} to={`/duelo?a=${d.a}&b=${d.b}`} className="home-duel">
+            <span className="home-duel-flags">{countryFlag(map, d.a)}<em>vs</em>{countryFlag(map, d.b)}</span>
+            <strong>{countryLabel(map, d.a)} o {countryLabel(map, d.b)}</strong>
+            <span className="home-duel-key">{d.headline}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   )
 }
 
