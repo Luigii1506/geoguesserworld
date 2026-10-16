@@ -14,6 +14,7 @@ import { hintItem } from '../lib/study/items'
 import type { NewItem } from '../lib/study/store'
 import { HintList } from '../components/guide'
 import { CountryTerrain } from '../components/geo/CountryTerrain'
+import { useDragToClose } from '../lib/gestures'
 
 // La guía de un país es una sola página: la cabecera (qué es, tu progreso, con quién se
 // confunde) y todas sus pistas, tema por tema, que se van cargando al bajar; al final, el
@@ -182,6 +183,22 @@ function PartBlock({ topic, part, hints, lang, memo }: { topic: Topic; part: Par
           {minor && <HintList list={part.minor} hints={hints} lang={lang} limit={30} step={30} />}
         </>
       )}
+    </div>
+  )
+}
+
+/** Hoja de filtros (desde abajo en el móvil; se cierra arrastrándola hacia abajo). */
+function FilterSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const drag = useDragToClose(onClose)
+  return (
+    <div className="sheet-backdrop" onClick={onClose} style={{ opacity: drag.backdrop }}>
+      <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={drag.style}>
+        <div className="sheet-head" {...drag.handle}>
+          <strong>{title}</strong>
+          <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        {children}
+      </div>
     </div>
   )
 }
@@ -574,12 +591,7 @@ export default function CountryGuide() {
 
       {/* ── hojas: región y más filtros ── */}
       {sheet && (
-        <div className="sheet-backdrop" onClick={() => setSheet(null)}>
-          <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-head">
-              <strong>{sheet === 'region' ? 'Región' : 'Filtros'}</strong>
-              <button className="btn btn-quiet" onClick={() => setSheet(null)} aria-label="Cerrar">✕</button>
-            </div>
+        <FilterSheet title={sheet === 'region' ? 'Región' : 'Filtros'} onClose={() => setSheet(null)}>
             <div className="sheet-body">
               {sheet === 'region' ? (
                 <div className="fx-group">
@@ -620,8 +632,7 @@ export default function CountryGuide() {
             <div className="sheet-foot">
               <button className="btn btn-primary" onClick={() => { setSheet(null); jump('biblioteca') }}>Ver {filtered.length.toLocaleString('es')} pistas</button>
             </div>
-          </div>
-        </div>
+        </FilterSheet>
       )}
 
       {showSummary && g.file.summaryImage && (

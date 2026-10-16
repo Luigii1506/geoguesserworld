@@ -182,7 +182,7 @@ export default function Visual() {
           images={items.map((it) => it.i)}
           index={box}
           onClose={() => setBox(null)}
-          caption={<span>{label(items[box]?.c ?? null, items[box]?.n)}</span>}
+          captionOf={(j) => <span>{items[j]?.c ? countryFlag(map, items[j].c!) : ''} {label(items[j]?.c ?? null, items[j]?.n)}</span>}
         />
       )}
     </div>

@@ -8,6 +8,7 @@ import { CountryChip, DataError, HintText, Loading, Swatch } from '../components
 import { hintText, useLang } from '../lib/i18n'
 import { SaveButton } from '../components/study/SaveButton'
 import { itemKey, type NewItem } from '../lib/study/store'
+import { useDragToClose } from '../lib/gestures'
 
 const WorldMap = lazy(() => import('../components/WorldMap'))
 
@@ -229,6 +230,7 @@ function CountryDetail({ e, type, onClose }: { e: Entry; type: string; onClose: 
   const lang = useLang()
   const file = useCountryFile(e.cc)
   const hints = useMemo(() => new Map((file?.hints ?? []).map((h) => [h.id, h])), [file])
+  const drag = useDragToClose(onClose)
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => ev.key === 'Escape' && onClose()
     const prev = document.body.style.overflow
@@ -255,8 +257,8 @@ function CountryDetail({ e, type, onClose }: { e: Entry; type: string; onClose: 
   }
   return createPortal(
     <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="pm-box cat-detail" onClick={(ev) => ev.stopPropagation()}>
-        <div className="pm-head">
+      <div className="pm-box cat-detail" onClick={(ev) => ev.stopPropagation()} style={drag.style}>
+        <div className="pm-head" {...drag.handle}>
           <div>
             <span className="eyebrow">{PLURAL[type]}</span>
             <strong>{countryFlag(map, e.cc)} {countryLabel(map, e.cc)}</strong>

@@ -6,7 +6,6 @@ import { countryFlag, countryLabel, useCountryFile, useCountryMap } from '../lib
 import { hintText, type Lang } from '../lib/i18n'
 import { fetchPlaceWiki, type PlaceWiki } from '../lib/wiki'
 import { COLOR_HEX, OBJECT_LABEL, SOURCE_NAMES, USEFULNESS, VARIANT_LABEL, attrLabel, valueLabel } from '../lib/labels'
-import { imageSrc } from '../lib/images'
 import { geo, useGeo } from '../lib/geo'
 import { entityMetrics, kindCount, kindLabel } from '../lib/geoFormat'
 import { Img } from './Img'
@@ -14,6 +13,7 @@ import { SaveButton } from './study/SaveButton'
 import { hintItem, placeItem } from '../lib/study/items'
 import { useStudy } from '../lib/study/store'
 import { retrievability } from '../lib/study/fsrs'
+import { useDragToClose } from '../lib/gestures'
 
 export function CountryChip({ code, map, to }: { code: string; map: Map<string, CountryRow>; to?: string }) {
   return (
@@ -75,52 +75,9 @@ export function Loading({ what = 'datos' }: { what?: string }) {
   return <div className="empty">Cargando {what}…</div>
 }
 
-/**
- * Visor a pantalla completa. Se monta directamente en <body>: dentro de la
- * página, cualquier ancestro con transform (animaciones) hace que position:
- * fixed se calcule respecto a ese ancestro y no cubra la ventana.
- */
-export function Lightbox({ images, index, onClose, caption }: {
-  images: string[]
-  index: number
-  onClose: () => void
-  caption?: React.ReactNode
-}) {
-  const [i, setI] = useState(index)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight') setI((x) => Math.min(images.length - 1, x + 1))
-      if (e.key === 'ArrowLeft') setI((x) => Math.max(0, x - 1))
-    }
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-  }, [images.length, onClose])
-
-  return createPortal(
-    <div className="lb" onClick={onClose} role="dialog" aria-modal="true">
-      <img className="lb-img" src={imageSrc(images[i])} alt="" onClick={(e) => e.stopPropagation()} />
-      <div className="lb-bar" onClick={(e) => e.stopPropagation()}>
-        {images.length > 1 && <span className="num">{i + 1} / {images.length}</span>}
-        {caption}
-        <a href={images[i]} target="_blank" rel="noreferrer">Abrir original</a>
-      </div>
-      <button className="lb-btn lb-close" onClick={onClose} aria-label="Cerrar">✕</button>
-      {images.length > 1 && i > 0 && (
-        <button className="lb-btn lb-prev" onClick={(e) => { e.stopPropagation(); setI(i - 1) }} aria-label="Anterior">‹</button>
-      )}
-      {images.length > 1 && i < images.length - 1 && (
-        <button className="lb-btn lb-next" onClick={(e) => { e.stopPropagation(); setI(i + 1) }} aria-label="Siguiente">›</button>
-      )}
-    </div>,
-    document.body,
-  )
-}
+// el visor de fotos (con gestos) vive en su propio archivo
+export { Lightbox } from './Lightbox'
+import { Lightbox } from './Lightbox'
 
 /** Una imagen que no carga (enlace roto, límite de peticiones) no deja un recuadro vacío. */
 function hideBroken(e: React.SyntheticEvent<HTMLImageElement>, box = '.shot') {
@@ -281,7 +238,7 @@ export function PhotoTiles({ items, limit = 12 }: { items: { image: string; capt
           images={items.map((it) => it.image)}
           index={box}
           onClose={() => setBox(null)}
-          caption={items[box]?.caption ? <span>{items[box].caption}</span> : undefined}
+          captionOf={(j) => (items[j]?.caption ? <span>{items[j].caption}</span> : undefined)}
         />
       )}
     </>
@@ -326,10 +283,11 @@ function SvModal({ sv, title, credit, onClose }: { sv: SV; title: string; credit
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  const drag = useDragToClose(onClose)
   return createPortal(
     <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="pm-box sv-box" onClick={(e) => e.stopPropagation()}>
-        <div className="pm-head">
+      <div className="pm-box sv-box" onClick={(e) => e.stopPropagation()} style={drag.style}>
+        <div className="pm-head" {...drag.handle}>
           <div><span className="eyebrow">Street View</span><strong>{title}</strong>{credit && <span className="pm-desc">Ejemplo de {SOURCE_NAMES[credit] ?? credit}</span>}</div>
           <button className="btn btn-quiet" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
@@ -612,6 +570,7 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
 }) {
   const [i, setI] = useState(index)
   const [wide, setWide] = useState(false)
+  const drag = useDragToClose(onClose)
   const [fetched, setFetched] = useState<PlaceWiki | null | undefined>(undefined)
   const [photo, setPhoto] = useState<string | null>(null)
   useEffect(() => {
@@ -676,8 +635,8 @@ export function PlaceMap({ places, index = 0, onClose, hints, lang = 'es' }: {
 
   return createPortal(
     <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="pm-box" onClick={(e) => e.stopPropagation()}>
-        <div className="pm-head">
+      <div className="pm-box" onClick={(e) => e.stopPropagation()} style={drag.style}>
+        <div className="pm-head" {...drag.handle}>
           <div>
             <span className="eyebrow">{kind}</span>
             <strong>{label(p)}</strong>

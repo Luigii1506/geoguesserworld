@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useCountries } from '../lib/data'
 import { REGION_ES } from '../lib/labels'
 import { Loading, MissingData } from '../components/ui'
+import { masteryByCountry } from '../lib/study/stats'
+import { useStudy } from '../lib/study/store'
 
 const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
 // el mapa (d3 + fronteras) se carga solo al abrir esa vista
@@ -10,6 +12,9 @@ const WorldMap = lazy(() => import('../components/WorldMap'))
 
 export default function Countries() {
   const countries = useCountries()
+  const study = useStudy()
+  // tu dominio de cada país (si ya lo estudias)
+  const mastery = useMemo(() => masteryByCountry(study), [study.cards, study.reviews]) // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState('')
   const [region, setRegion] = useState('')
   const [order, setOrder] = useState<'rich' | 'name'>('rich')
@@ -38,12 +43,12 @@ export default function Countries() {
         <p className="lead">Cada guía empieza por lo esencial: las pistas que por sí solas te ubican.</p>
       </header>
 
-      <div className="toolbar">
+      <div className="toolbar countries-toolbar">
+        <input className="input countries-search" placeholder="Buscar país" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="seg">
           <button className={mode === 'list' ? 'on' : ''} onClick={() => setMode('list')}>Lista</button>
           <button className={mode === 'map' ? 'on' : ''} onClick={() => setMode('map')}>Mapa</button>
         </div>
-        <input className="input" placeholder="Buscar país" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {mode === 'list' && (
         <>
         <div className="seg">
@@ -71,10 +76,14 @@ export default function Countries() {
           {list.map((c) => (
             <Link key={c.code} to={`/pais/${c.code}`} className="country-item">
               <span className="flag">{c.flag}</span>
-              <span>
+              <span className="country-item-main">
                 <strong>{c.name_es ?? c.name}</strong>
-                <small>{c.essential} esenciales · {c.groups} pistas</small>
+                <small>{c.essential} determinantes · {c.groups} pistas{c.region ? ` · ${REGION_ES[c.region] ?? c.region}` : ''}</small>
               </span>
+              {mastery.get(c.code) && (
+                <span className="country-known" title="Tu dominio de este país">{Math.round(mastery.get(c.code)!.score * 100)} %</span>
+              )}
+              <span className="country-go" aria-hidden="true">›</span>
             </Link>
           ))}
         </div>

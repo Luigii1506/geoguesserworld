@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useDragToClose } from '../../lib/gestures'
 import { Link } from 'react-router-dom'
 import { createDeck, isSaved, liveDecks, saveItems, setItemDecks, setNote, setSettings, unsaveItem, useStudy, type NewItem } from '../../lib/study/store'
 
@@ -54,6 +55,7 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
   const [draft, setDraft] = useState(item?.note ?? '')
   const [newDeck, setNewDeck] = useState('')
   const decks = liveDecks(s)
+  const drag = useDragToClose(onClose)
 
   useEffect(() => {
     const away = (e: MouseEvent | TouchEvent) => ref.current && !ref.current.contains(e.target as Node) && onClose()
@@ -90,8 +92,8 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
   const saveNote = () => draft !== item.note && setNote(itemKey, draft)
 
   return createPortal(
-    <div className="save-panel" ref={ref} role="dialog" aria-label="Guardado en Mi estudio" style={place(anchor)} onClick={(e) => e.stopPropagation()}>
-      <div className="save-panel-head">
+    <div className="save-panel" ref={ref} role="dialog" aria-label="Guardado en Mi estudio" style={{ ...place(anchor), ...drag.style }} onClick={(e) => e.stopPropagation()}>
+      <div className="save-panel-head" {...drag.handle}>
         <strong>★ En Mi estudio</strong>
         <Link to="/entrenar" className="small">Ir a estudiar →</Link>
       </div>

@@ -2002,3 +2002,66 @@ kbd {
 .cat-tile { height: 100%; }
 .cat-body { align-content: start; }
 @media (max-width: 600px) { .cat-attrs > span:nth-child(n + 3) { display: none; } }
+
+/* ── visor de fotos con gestos (components/Lightbox.tsx) ── */
+.lbx { position: fixed; inset: 0; z-index: 1100; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; animation: sheet-fade 0.18s ease-out; }
+.lbx-track { position: absolute; inset: 0; will-change: transform; }
+.lbx-slide { position: absolute; top: 0; width: 100%; height: 100%; display: grid; place-items: center; padding: 56px 12px 84px; }
+.lbx-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; will-change: transform; -webkit-user-drag: none; }
+.lbx-top, .lbx-bottom { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 0.8rem; padding: 10px 14px; color: #e4e6e3; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 2; }
+.lbx-top { top: 0; justify-content: flex-end; padding-top: max(10px, env(safe-area-inset-top)); background: linear-gradient(rgb(0 0 0 / 0.45), transparent); }
+.lbx-bottom { bottom: 0; flex-wrap: wrap; justify-content: center; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgb(0 0 0 / 0.55)); font-size: 0.86rem; }
+.lbx-count { margin-right: auto; font-size: 0.85rem; opacity: 0.85; }
+.lbx-caption { flex: 1 1 100%; text-align: center; }
+.lbx-orig { color: #9fd4bf; font-size: 0.8rem; }
+.lbx-dots { display: flex; gap: 5px; }
+.lbx-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgb(255 255 255 / 0.35); transition: background 0.2s ease, transform 0.2s ease; }
+.lbx-dots span.on { background: #fff; transform: scale(1.25); }
+.lbx-btn {
+  width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; display: grid; place-items: center;
+  background: rgb(255 255 255 / 0.12); color: #fff; font-size: 1.3rem; backdrop-filter: blur(6px); z-index: 3;
+}
+.lbx-btn:hover { background: rgb(255 255 255 / 0.22); }
+.lbx-prev, .lbx-next { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.8rem; transition: opacity 0.2s ease; }
+.lbx-prev { left: 14px; }
+.lbx-next { right: 14px; }
+/* sin controles (un toque en la foto): solo la foto */
+.lbx-bare .lbx-top, .lbx-bare .lbx-bottom { opacity: 0; pointer-events: none; }
+.lbx-bare .lbx-prev, .lbx-bare .lbx-next { opacity: 0; pointer-events: none; }
+/* en pantallas táctiles se desliza: las flechas sobran */
+@media (hover: none) { .lbx-prev, .lbx-next { display: none; } }
+
+/* ── hojas del móvil: un asa arriba (se cierran arrastrándolas hacia abajo, lib/gestures.ts) ── */
+@media (max-width: 640px) {
+  .pm-head, .sheet-head, .gsheet-head, .save-panel-head { position: relative; padding-top: 1.1rem; }
+  .pm-head::before, .sheet-head::before, .gsheet-head::before, .save-panel-head::before {
+    content: ''; position: absolute; top: 7px; left: 50%; width: 38px; height: 4px; margin-left: -19px;
+    border-radius: 4px; background: var(--line-2);
+  }
+  .sheet-backdrop, .gsheet { transition: opacity 0.2s ease; }
+}
+
+/* ── países ── */
+.country-item-main { flex: 1; min-width: 0; }
+.country-item-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.country-known { flex: none; font-size: 0.74rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 0.15rem 0.5rem; border-radius: 99px; }
+.country-go { flex: none; color: var(--ink-3); font-size: 1.3rem; line-height: 1; }
+.countries-search { flex: 1 1 260px; }
+
+/* ══ móvil: controles con el mismo tamaño táctil en toda la app ══
+   segmentos y filas de chips en una sola línea que se desliza (no se parten en dos) */
+@media (max-width: 700px) {
+  .seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { flex: none; min-height: 34px; }
+  .chip, .fx-pill, .cat-type, .lib-mchips button { min-height: 34px; }
+  .chips { gap: 0.35rem; }
+  .toolbar { gap: 0.5rem; }
+  .toolbar .input, .countries-search { flex: 1 1 100%; min-width: 0; }
+  .country-list { grid-template-columns: 1fr; }
+  .country-item { padding: 0.8rem 0.9rem; }
+  .country-item .flag { font-size: 1.9rem; }
+  /* botones principales a un tamaño cómodo para el pulgar */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 32px; }
+}
