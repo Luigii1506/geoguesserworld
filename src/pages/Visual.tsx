@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useCountryMap, countryFlag, countryLabel } from '../lib/data'
 import { REGION_ES, SOURCE_NAMES } from '../lib/labels'
 import { DataError, Lightbox, Loading } from '../components/ui'
@@ -76,7 +77,10 @@ export default function Visual() {
     <div>
       <header className="page-head">
         <h1>Fotos</h1>
-        <p className="lead">{photos.toLocaleString('es')} imágenes de seis fuentes. Elige un tema y compara cómo es en cada país.</p>
+        <p className="lead">
+          {photos.toLocaleString('es')} imágenes de seis fuentes. Elige un tema y compara cómo es en cada país.
+          {' '}Para ver una ficha por país (bolardos, postes, matrículas…) con sus rasgos, abre el <Link to="/catalogo">Catálogo</Link>.
+        </p>
       </header>
 
       <div className="toolbar">

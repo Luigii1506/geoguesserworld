@@ -59,6 +59,11 @@ const FOCUS_OF = new Map(FOCUS.flatMap((x) => x.cats.map((c) => [c, x.id] as con
 type FKey = (typeof FKEYS)[number]
 type Filters = Partial<Record<FKey, string>>
 const topicId = (cat: string) => `t-${cat}`
+// tema de la guía → tipo del catálogo (el mismo objeto en todos los países)
+const CATALOG_TYPE: Record<string, string> = {
+  bollards: 'bollard', poles: 'utility_pole', plates: 'licence_plate', google_car: 'google_car',
+  road_lines: 'road_lines', guardrails: 'guardrail', signs: 'chevron',
+}
 const subId = (cat: string, sub: string | null) => `t-${cat}-${sub ?? 'x'}`
 const FIRST = 4 // pistas por subtema al cargar; el resto llega al bajar
 const MORE = 12
@@ -721,6 +726,7 @@ export default function CountryGuide() {
                       <h2>{g.catName(t.cat)}</h2>
                       <span className="muted">{t.n} {t.n === 1 ? 'pista' : 'pistas'}{t.essential ? ` · ${t.essential} determinantes` : ''}</span>
                       {TOPIC_MAP_LAYER[t.cat] && <Link className="lib-map" to={`/mapas?capa=${TOPIC_MAP_LAYER[t.cat]}`}>Ver en el mapa mundial →</Link>}
+                      {CATALOG_TYPE[t.cat] && <Link className="lib-map" to={`/catalogo?tipo=${CATALOG_TYPE[t.cat]}&pais=${country.code}`}>Comparar con otros países →</Link>}
                       <StudyAllButton className="btn btn-quiet btn-sm" label="Estudiar este tema" deckName={name} items={() => toItems(t.parts.flatMap((p) => [...p.hints, ...p.minor]))} />
                     </header>
                   }

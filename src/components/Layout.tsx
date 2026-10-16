@@ -8,6 +8,7 @@ import { useUser } from '../lib/auth'
 // Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
 const NAV = [
   { to: '/paises', label: 'Países' },
+  { to: '/catalogo', label: 'Catálogo' },
   { to: '/mapas', label: 'Mapas' },
   { to: '/geografia', label: 'Geografía' },
   { to: '/buscar', label: 'Buscar' },
