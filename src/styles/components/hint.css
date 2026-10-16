@@ -1,0 +1,50 @@
+/* utilidad de una pista: un punto discreto */
+.use { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--ink-3); white-space: nowrap; }
+.use::before { content: ''; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
+.use-3 { color: var(--accent); font-weight: 600; }
+.use-3::before { background: currentColor; }
+/* ── pista ── */
+.hints { display: grid; }
+.hint { padding: 1rem 0; border-top: 1px solid var(--line); display: grid; gap: 0.6rem; }
+.hint:first-child { border-top: none; padding-top: 0.2rem; }
+.hint-text { font-size: 0.98rem; color: var(--ink); max-width: 76ch; display: grid; gap: 0.35rem; }
+.hint-text p, .hint-text ul { margin: 0; }
+.hint-text ul { padding-left: 1.1rem; display: grid; gap: 0.2rem; }
+.hint-text li::marker { color: var(--ink-3); }
+.hint-note { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem; padding: 0.45rem 0.7rem; border-left: 2px solid var(--accent); background: var(--sunken); border-radius: 0 var(--r) var(--r) 0; font-size: 0.9rem; color: var(--ink-2); }
+.hint-note > span { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding-top: 0.15rem; }
+.hint-note > div { display: grid; gap: 0.25rem; }
+.topic-link { font-weight: 600; color: var(--accent) !important; }
+.hint-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; font-size: 0.8rem; color: var(--ink-3); }
+.hint-meta a, .hint-meta .link { color: var(--ink-2); font-size: 0.8rem; }
+.hint-meta a:hover, .hint-meta .link:hover { color: var(--accent); }
+.hint .gallery { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); max-width: 1000px; }
+.hint-examples { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.84rem; }
+.hint-examples a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.hint-examples a:hover { color: var(--accent); text-decoration-color: currentColor; }
+.hint-sources { display: grid; gap: 0.8rem; padding: 0.9rem 1rem; background: var(--sunken); border-radius: var(--r); font-size: 0.86rem; }
+.hint-sources strong { font-size: 0.8rem; }
+.hint-sources p { color: var(--ink-2); white-space: pre-line; margin-top: 0.15rem; }
+.topic-facts { display: grid; gap: 0.35rem; margin: 0; font-size: 0.9rem; }
+.topic-facts > div { display: grid; grid-template-columns: 11rem 1fr; gap: 0.8rem; }
+.topic-facts dt { color: var(--ink-3); font-size: 0.82rem; padding-top: 0.1rem; }
+.topic-facts dd { margin: 0; }
+@media (max-width: 600px) { .topic-facts > div { grid-template-columns: 1fr; gap: 0; } }
+.topic { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--surface); color: var(--ink); display: grid; transition: transform 0.25s ease, border-color 0.25s ease; }
+.topic:hover { text-decoration: none; transform: translateY(-2px); border-color: var(--line-2); }
+/* al llegar con el índice, la cabecera de destino se ilumina un instante */
+.flash > .lib-topic-head h2, .flash > .cg-chapter-head h2, .flash.lib-part > .sub-title { animation: lib-flash 1.1s ease-out; }
+@keyframes lib-flash { 0% { color: var(--accent); transform: translateX(6px); } 100% { color: inherit; transform: none; } }
+.flash.lib-topic, .flash.cg-chapter, .flash.lib-books { animation: lib-in 0.5s ease-out; }
+@keyframes lib-in { from { opacity: 0.35; } to { opacity: 1; } }
+/* lugares mencionados en una pista y su mapa */
+.hint-places { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.4rem; font-size: 0.84rem; }
+.topic-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.topic-bars li { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: 0.6rem; align-items: center; font-size: 0.9rem; }
+.topic-bars .deck-bar { max-width: none; height: 6px; }
+.hint-known { font-size: 0.76rem; font-weight: 500; padding: 0.1rem 0.5rem; border-radius: 999px; }
+.hint-known.good { background: var(--accent-soft); color: var(--accent); }
+.hint-known.mid { background: color-mix(in srgb, #c9a43d 18%, var(--surface)); color: #8a6d1d; }
+.hint-known.low { background: var(--danger-soft); color: var(--danger); }
+.topic-facts-line { display: flex; flex-wrap: wrap; gap: 0.2rem 1.2rem; margin: -0.4rem 0 1rem; font-size: 0.86rem; color: var(--ink-2); }
+.topic-facts-line em { font-style: normal; color: var(--ink-3); }

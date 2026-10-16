@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type CountryRow, type MapLayer, useCountries, useMaps } from '../lib/data'
 import { COLOR_HEX, valueLabel } from '../lib/labels'
@@ -41,6 +41,13 @@ export default function Maps() {
   const values = useMemo(() => (layer ? resolve(layer) : []), [layer])
   const byValue = useMemo(() => new Map(values.map((v) => [v.v, v])), [values])
   const focus = hoverValue ?? lockedValue
+  // en el móvil la lista de capas se desliza: la elegida, a la vista
+  const rail = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const r = rail.current
+    const el = r?.querySelector<HTMLElement>('button.on')?.closest<HTMLElement>('.mp-group')
+    if (r && el && r.scrollWidth > r.clientWidth) r.scrollLeft += el.getBoundingClientRect().left - r.getBoundingClientRect().left - 16
+  }, [layer?.id])
 
   const groups = useMemo(() => {
     const m = new Map<string, MapLayer[]>()
@@ -116,8 +123,9 @@ export default function Maps() {
           <button
             key={v.v}
             className={`mp-chip ${focus === v.v ? 'on' : ''} ${focus && focus !== v.v ? 'off' : ''}`}
-            onMouseEnter={() => setHoverValue(v.v)}
-            onMouseLeave={() => setHoverValue(null)}
+            // solo con ratón: en una pantalla táctil el toque simularía el hover y el valor se quedaría encendido
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setHoverValue(v.v)}
+            onPointerLeave={(e) => e.pointerType === 'mouse' && setHoverValue(null)}
             onClick={() => setLockedValue(lockedValue === v.v ? null : v.v)}
           >
             <span className="mp-swatch" style={{ background: v.color }} />
@@ -133,7 +141,7 @@ export default function Maps() {
 
   return (
     <div className="maps">
-      <aside className="mp-layers">
+      <aside className="mp-layers" ref={rail}>
         {groups.map(([g, list]) => (
           <div key={g} className="mp-group">
             <span className="eyebrow">{g}</span>
@@ -154,7 +162,7 @@ export default function Maps() {
           <p className="muted small">
             {layer.total} países con dato{layer.source ? ` · ${layer.source}` : ''}
             {layer.multi ? ' · un país puede tener varios valores (rayas)' : ''}
-            {' · '}pasa el ratón por la leyenda para aislar un valor, haz clic para fijarlo
+            {' · '}elige un valor de la leyenda para ver solo esos países
           </p>
         </header>
         {legend}

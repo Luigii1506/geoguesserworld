@@ -1,0 +1,10 @@
+/* ── esqueletos de carga ── */
+.skeleton-page { display: grid; gap: 0.8rem; padding: 0.4rem 0 2rem; }
+.sk { display: block; border-radius: var(--r); background: linear-gradient(90deg, var(--sunken) 0%, color-mix(in srgb, var(--line) 70%, var(--sunken)) 50%, var(--sunken) 100%); background-size: 200% 100%; animation: skel 1.3s linear infinite; }
+.sk-title { height: 2.2rem; width: min(60%, 340px); }
+.sk-line { height: 1rem; width: min(90%, 620px); }
+.sk-line.short { width: min(55%, 380px); }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.8rem; margin-top: 0.8rem; }
+.sk-card { aspect-ratio: 4 / 3; border-radius: var(--r-lg); }
+@media (max-width: 600px) { .sk-grid { grid-template-columns: 1fr 1fr; gap: 0.55rem; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

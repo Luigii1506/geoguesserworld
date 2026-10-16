@@ -6,6 +6,7 @@ import { type CountryRow, useCountryMap, useJson } from '../lib/data'
 import { imageSrc } from '../lib/images'
 import { Lightbox, Loading, MissingData } from '../components/ui'
 import { Img } from '../components/Img'
+import { REGION_ES } from '../lib/labels'
 
 // Duelo entre gemelos: los países que más se confunden, enfrentados en fotos.
 // Como una historia: el problema (se confunden), la guía (la clave en una
@@ -19,6 +20,7 @@ type DuelFile = { a: string; b: string; headline: string | null; topics: DuelTop
 type DuelIndex = { a: string; b: string; score: number; headline: string | null; diffs: number }[]
 
 const ROUNDS = 10
+const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
 const nameOf = (c?: CountryRow) => c?.name_es ?? c?.name ?? ''
 
 /** Las tarjetas aparecen con un leve ascenso al entrar en pantalla (se revisa en cada render: los datos llegan por partes). */
@@ -35,8 +37,8 @@ function useReveal() {
 }
 
 function jump(id: string) {
-  const el = document.getElementById(id)
-  if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 70, behavior: 'smooth' })
+  // respeta el scroll-margin-top de la sección (más en el móvil, por la barra del duelo)
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function shuffle<T>(list: T[]): T[] {
@@ -145,9 +147,12 @@ function SidePhoto({ side, c, onOpen }: { side: Side; c: CountryRow; onOpen: (im
 
 /** Sin pareja elegida: todas las parejas de gemelos. */
 function DuelPicker({ index, map }: { index: DuelIndex; map: Map<string, CountryRow> }) {
+  const [params, setParams] = useSearchParams()
   const [q, setQ] = useState('')
+  const region = params.get('continente') ?? ''
   const needle = q.trim().toLowerCase()
-  const list = index.filter((d) => !needle || `${nameOf(map.get(d.a))} ${nameOf(map.get(d.b))}`.toLowerCase().includes(needle))
+  const inRegion = (d: DuelIndex[number]) => !region || map.get(d.a)?.region === region || map.get(d.b)?.region === region
+  const list = index.filter((d) => inRegion(d) && (!needle || `${nameOf(map.get(d.a))} ${nameOf(map.get(d.b))}`.toLowerCase().includes(needle)))
   useReveal()
   return (
     <div className="duel">
@@ -157,16 +162,24 @@ function DuelPicker({ index, map }: { index: DuelIndex; map: Map<string, Country
         <p className="lead">
           Los gemelos son donde más puntos se pierden. Elige una pareja: verás sus diferencias en fotos y te pondrás a prueba en dos minutos.
         </p>
-        <input className="input dp-search" placeholder="Busca un país: Eslovenia, Kenia, Uruguay…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="dp-tools">
+          <input className="input dp-search" placeholder="Busca un país: Eslovenia, Kenia, Uruguay…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar un país" />
+          <div className="seg">
+            <button className={!region ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>Todo</button>
+            {REGIONS.map((r) => <button key={r} className={region === r ? 'on' : ''} onClick={() => setParams({ continente: r }, { replace: true })}>{REGION_ES[r]}</button>)}
+          </div>
+        </div>
+        <p className="muted small dp-count">{list.length} {list.length === 1 ? 'pareja' : 'parejas'}</p>
       </header>
       <div className="dp-grid">
+        {list.length === 0 && <p className="muted">Ninguna pareja coincide.</p>}
         {list.slice(0, 120).map((d) => {
           const a = map.get(d.a)
           const b = map.get(d.b)
           if (!a || !b) return null
           return (
             <Link key={`${d.a}_${d.b}`} to={`/duelo?a=${d.a}&b=${d.b}`} className="dp-card reveal">
-              <div className="dp-flags"><span>{a.flag}</span><em>vs</em><span>{b.flag}</span></div>
+              <div className="dp-flags" aria-hidden="true"><span>{a.flag}</span><em>vs</em><span>{b.flag}</span></div>
               <strong>{nameOf(a)} · {nameOf(b)}</strong>
               {d.headline && <p>{d.headline}</p>}
               <span className="dp-n">{d.diffs} diferencias</span>
@@ -241,6 +254,12 @@ export default function Duel() {
           <li><span className="dd-plan-done"><span>3</span>Ya no los confundes</span></li>
         </ol>
       </header>
+
+      {/* en el móvil, al bajar: quién contra quién y el salto al quiz */}
+      <div className="dd-bar">
+        <span><span className="flag">{A.flag}</span> {nameOf(A)} <em>vs</em> <span className="flag">{B.flag}</span> {nameOf(B)}</span>
+        <button className="btn btn-sm btn-primary" onClick={() => jump('quiz')}>Ponte a prueba</button>
+      </div>
 
       {/* ── 1 · diferencias ── */}
       <section id="diferencias" className="dd-section">

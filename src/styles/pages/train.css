@@ -1,0 +1,45 @@
+/* ── Entrenar ── */
+.train-progress { height: 3px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 0.6rem 0 1.8rem; }
+.train-progress span { display: block; height: 100%; background: var(--ink); transition: width 0.3s ease; }
+.question { display: grid; gap: 1.2rem; }
+.question-text { font-size: 1.12rem; line-height: 1.55; white-space: pre-line; }
+.question-img { width: 100%; max-height: 460px; object-fit: contain; background: var(--sunken); border-radius: var(--r); display: block; }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+@media (max-width: 560px) { .answers { grid-template-columns: 1fr; } }
+.answer {
+  display: flex; align-items: center; gap: 0.6rem; min-height: 52px; padding: 0 1rem; border-radius: var(--r);
+  border: 1px solid var(--line-2); background: var(--surface); text-align: left; cursor: pointer; font-size: 1rem;
+}
+.answer:hover:not(:disabled) { border-color: var(--ink); }
+.answer:disabled { cursor: default; }
+.answer.right { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.answer.wrong { border-color: var(--danger); background: var(--danger-soft); }
+.answer .flag { font-size: 1.3rem; }
+.feedback { display: grid; gap: 0.9rem; padding-top: 1.1rem; border-top: 1px solid var(--line); }
+.settings { display: grid; gap: 1.5rem; }
+.setting { display: grid; gap: 0.55rem; }
+.setting-inline { display: grid; gap: 0.25rem; }
+.train-choices { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0.9rem; margin-bottom: 1.4rem; }
+.train-choice { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+/* el selector de país del examen: su ancho natural (el país de nombre más largo) no debe
+   ensanchar la tarjeta; ocupa lo que haya y el botón va a su lado o debajo */
+.train-choice .row > .select { flex: 1 1 180px; min-width: 0; width: 100%; max-width: 100%; }
+.train-choice { display: grid; gap: 0.6rem; align-content: start; padding: 1.2rem 1.3rem; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.train-choice h2 { font-size: 1.3rem; margin: 0; }
+.train-choice p { margin: 0; color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; }
+.train-choice .row { margin-top: 0.3rem; }
+.train-choice-main { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); }
+.train-choice-icon { font-size: 1.4rem; color: var(--accent); line-height: 1; }
+.train-choice-stat { color: var(--ink) !important; font-weight: 500; }
+.train-today { display: flex; flex-wrap: wrap; gap: 1rem 2.2rem; align-items: center; padding: 0.9rem 1.1rem; border-radius: var(--r-lg); background: var(--sunken); margin-bottom: 1rem; }
+.train-today > div { display: grid; gap: 0.1rem; }
+.train-today strong { font-family: var(--font-display); font-size: 1.4rem; font-weight: 500; line-height: 1; }
+.train-today strong small { font-size: 0.85rem; color: var(--ink-3); font-family: var(--font-body); }
+.train-today > div > span { font-size: 0.76rem; color: var(--ink-2); }
+.train-today .sync-line { flex: 1 1 100%; }
+.train-more { border-top: 1px solid var(--line); padding: 0.4rem 0; }
+.train-more > summary { cursor: pointer; padding: 0.7rem 0; font-weight: 600; list-style: none; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.train-more > summary::before { content: '▸'; color: var(--ink-3); transition: transform 0.2s ease; }
+.train-more[open] > summary::before { transform: rotate(90deg); }
+.train-more > summary::-webkit-details-marker { display: none; }
+@media (max-width: 900px) { .train-choices { grid-template-columns: minmax(0, 1fr); } }

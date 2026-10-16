@@ -453,7 +453,7 @@ export default function Search() {
             if (hit) { writeParams({ pais: hit.code }); setGuessText('') }
           }}
         >
-          <input className="input" list="sx-countries" placeholder="¿Crees que es un país? Escríbelo: Rusia, Kenia…" value={guessText} onChange={(e) => setGuessText(e.target.value)} />
+          <input className="input" list="sx-countries" placeholder="¿Sospechas un país? Rusia, Kenia…" value={guessText} onChange={(e) => setGuessText(e.target.value)} />
           <datalist id="sx-countries">
             {countries.filter((c) => c.groups > 0).map((c) => <option key={c.code} value={c.name_es ?? c.name} />)}
           </datalist>
@@ -466,7 +466,7 @@ export default function Search() {
       </header>
 
       {/* pistas marcadas + resumen, siempre a la vista */}
-      {!guess && <div className="sx-bar">
+      {!guess && <div className={`sx-bar ${total === 0 ? 'empty' : ''}`}>
         <div className="sx-picked">
           {total === 0 ? (
             <span className="muted">{mode === 'fotos' ? 'Aún no has elegido nada. Empieza por lo que más se vea: un bolardo, un poste, la matrícula…' : 'Aún no has marcado nada. Empieza por lo básico: el lado de conducción.'}</span>
@@ -542,7 +542,7 @@ export default function Search() {
                 <button key={o.id} className={`sx-tile ${chosen(wallType)?.id === o.id ? 'on' : ''}`} onClick={() => pickPhoto(o)}>
                   <Img src={o.img!} />
                   <span className="sx-tile-cap">
-                    {countries.find((c) => c.code === o.country)?.flag} {o.region ?? (o.variant !== 'main' ? VARIANT_NOTE[o.variant] : '')}
+                    {[countries.find((c) => c.code === o.country)?.flag, o.region ?? (o.variant !== 'main' ? VARIANT_NOTE[o.variant] : '')].filter(Boolean).join(' ')}
                   </span>
                 </button>
               ))}

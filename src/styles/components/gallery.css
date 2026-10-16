@@ -1,0 +1,91 @@
+/* ── galería: imágenes completas, sin recortar ── */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.6rem; }
+.shot {
+  position: relative; display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--sunken); overflow: hidden; cursor: zoom-in; aspect-ratio: 4 / 3;
+}
+.shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.shot:hover { border-color: var(--ink-3); }
+.shot-more { display: grid; place-items: center; color: var(--ink-2); font-size: 0.9rem; cursor: pointer; }
+/* tira: cada imagen completa a altura fija, con su proporción (sin franjas vacías) */
+.strip { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.strip .shot { width: auto; height: 230px; aspect-ratio: auto; background: none; }
+.strip .shot img { width: auto; height: 100%; max-width: min(100%, 520px); object-fit: contain; }
+.strip .shot-more { width: 120px; }
+@media (max-width: 700px) { .strip .shot { height: auto; width: 100%; } .strip .shot img { width: 100%; height: auto; max-width: none; } }
+/* fotos con pie (marcas, variantes) */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.8rem 0.6rem; }
+.tile { margin: 0; display: grid; gap: 0.3rem; align-content: start; }
+.tile figcaption { font-size: 0.82rem; color: var(--ink-2); line-height: 1.3; }
+.tile-more { aspect-ratio: 4 / 3; }
+/* ── Explorar fotos ── */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem 0.8rem; }
+.photo { display: grid; gap: 0.35rem; align-content: start; }
+.photo-caption { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.84rem; }
+.photo-caption .muted { font-size: 0.74rem; }
+.photo-text { font-size: 0.8rem; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* genéricos */
+.grid { display: grid; gap: 1rem; }
+.grid-2 { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.source-card { display: grid; gap: 0.6rem; align-content: start; }
+.source-card dl { display: grid; gap: 0.5rem; margin: 0; font-size: 0.88rem; }
+.source-card dt { font-size: 0.74rem; color: var(--ink-3); }
+.source-card dd { margin: 0; color: var(--ink-2); }
+/* imagen de Wikipedia (lugares) */
+.wiki-img { width: 100%; max-height: 440px; object-fit: contain; background: var(--sunken); border-radius: var(--r); display: block; }
+.wiki-attr { font-size: 0.72rem; color: var(--ink-3); margin-top: 0.3rem; }
+.variants { display: grid; gap: 0; margin: 0.3rem 0 0; font-size: 0.88rem; border-top: 1px solid var(--line); }
+.variants > div { display: grid; grid-template-columns: 11rem 1fr; gap: 0.8rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.variants dt { font-weight: 600; }
+.variants dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 600px) { .variants > div { grid-template-columns: 1fr; gap: 0.1rem; } }
+/* una sola imagen (infografías, mapas): más grande, sin pasar de la columna */
+.strip-one .shot { height: auto; max-width: min(100%, 760px); }
+.strip-one .shot img { width: auto; height: auto; max-height: 520px; max-width: 100%; }
+/* Street View incrustado y créditos de imagen */
+.img-credit { font-size: 0.74rem; color: var(--ink-3); margin-top: -0.2rem; }
+.img-credit a { color: var(--ink-2); }
+.tile { position: relative; }
+.tile-sv {
+  position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; gap: 0.35rem; font: inherit; font-size: 0.68rem; font-weight: 700;
+  padding: 0.2rem 0.55rem; border-radius: 99px; border: none; background: rgb(255 255 255 / 0.92); color: var(--accent); cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+.tile-sv .sv-dot { width: 7px; height: 7px; }
+.tile-sv:hover { background: var(--accent); color: var(--accent-ink); }
+/* imágenes: aparecen con un fundido al cargar (sin saltos bruscos) */
+.img-fade { opacity: 0; transition: opacity 0.35s ease; }
+.img-fade.is-loaded { opacity: 1; }
+.photo-save { position: absolute; top: 8px; right: 8px; z-index: 2; }
+/* ══════════════════════════════════════════════════════════════════════════
+   Consistencia (2026-10): un solo criterio de imagen y de espaciado en toda la app
+   · objetos en cuadrícula (fotos de Explorar, mosaicos de la guía, catálogo): marco
+     cuadrado igual para todas y la foto entera dentro (recortarla quitaría lo que importa:
+     el reflector de un bolardo está arriba)
+   · fotos de una pista: tira de altura fija que se desliza en el móvil; si es una sola,
+     entera, con un alto máximo
+   ══════════════════════════════════════════════════════════════════════════ */
+.photo-grid .shot, .tiles .shot, .gallery .shot { aspect-ratio: 1 / 1; }
+.photo-grid .shot img, .tiles .shot img, .gallery .shot img { object-fit: contain; }
+/* una sola foto en una pista: entera, sin pasar de un alto razonable */
+.strip-one .shot img { max-height: 420px; }
+.tile-more { aspect-ratio: 1 / 1; }
+.photo-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem 0.7rem; }
+.photo-caption > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-text { -webkit-line-clamp: 2; }
+@media (max-width: 700px) {
+  /* tira deslizable: todas a la misma altura */
+  .strip { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip .shot { flex: none; height: 200px; width: auto; scroll-snap-align: start; }
+  .strip .shot img { width: auto; height: 100%; max-width: 78vw; object-fit: cover; }
+  .strip .shot-more { width: 110px; height: 200px; }
+  .strip-one { margin: 0; padding: 0; }
+  .strip-one .shot { width: 100%; height: auto; }
+  .strip-one .shot img { width: 100%; height: auto; max-width: none; max-height: 56vh; object-fit: contain; }
+
+  .photo-grid { grid-template-columns: 1fr 1fr; gap: 0.8rem 0.5rem; }
+  .photo-caption { font-size: 0.8rem; }
+  .tiles { grid-template-columns: 1fr 1fr; gap: 0.6rem 0.5rem; }
+  .gallery, .hint .gallery { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+}

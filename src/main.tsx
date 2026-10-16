@@ -4,7 +4,7 @@ import '@fontsource-variable/fraunces'
 import '@fontsource-variable/archivo'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/600.css'
-import './styles/global.css'
+import './styles/index.css'
 import App from './App'
 import { reloadForNewVersion } from './lib/staleChunk'
 

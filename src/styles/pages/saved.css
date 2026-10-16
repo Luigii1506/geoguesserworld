@@ -1,0 +1,39 @@
+/* ── guardados ── */
+.saved-head { display: flex; justify-content: space-between; align-items: end; gap: 1rem; flex-wrap: wrap; }
+.saved-toolbar .input { flex: 1 1 280px; }
+.saved-filters { display: grid; gap: 0.6rem; margin: -0.4rem 0 1.2rem; }
+.saved-filters .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; align-items: center; }
+.saved-filters .chips::-webkit-scrollbar { display: none; }
+.saved-filters .chips .eyebrow { flex: none; margin-right: 0.3rem; }
+.saved-filters .chip { flex: none; }
+.saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem; }
+.saved-card {
+  display: grid; grid-template-rows: auto 1fr; padding: 0; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--surface); transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.saved-card:hover { transform: translateY(-2px); border-color: var(--line-2); }
+.saved-card.noimg { grid-template-rows: 1fr; }
+.saved-card-img { display: grid; place-items: center; aspect-ratio: 1 / 1; background: var(--sunken); overflow: hidden; }
+.saved-card-img img { width: 100%; height: 100%; object-fit: contain; }
+.saved-card-art { font-size: 2rem; gap: 0.3rem; display: flex; align-items: center; justify-content: center; }
+.saved-card-art em { font-family: var(--font-display); font-size: 0.9rem; color: var(--ink-3); }
+.saved-card-body { display: grid; gap: 0.35rem; align-content: start; padding: 0.65rem 0.8rem 0.8rem; }
+.saved-card-meta { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; }
+.saved-card-meta > span:first-child { font-weight: 600; }
+.saved-card-text { font-size: 0.88rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.saved-card.noimg .saved-card-text { -webkit-line-clamp: 7; }
+.saved-card-note { font-size: 0.8rem; color: var(--accent); font-style: italic; }
+.saved-card .hint-known { justify-self: start; }
+.saved-tip { margin-top: 1.6rem; }
+.saved-sheet { width: min(720px, 100%); }
+.saved-sheet-body { display: grid; gap: 1rem; }
+.saved-sheet-img { aspect-ratio: auto; max-height: 52vh; }
+.saved-sheet-img img { max-height: 52vh; object-fit: contain; }
+.saved-sheet-key { margin: 0; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.4; }
+.saved-sheet .save-newdeck .input { height: 34px; width: 140px; }
+.saved-sheet-actions { gap: 0.5rem; }
+@media (max-width: 600px) {
+  .saved-grid { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+  .saved-head .btn { width: 100%; }
+  .saved-card-text { font-size: 0.82rem; }
+}

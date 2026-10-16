@@ -1,0 +1,67 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   GeoMastery · sistema de diseño
+   Neutro y sobrio: papel cálido, tinta casi negra, un único acento verde.
+   Sin sombras ni degradados; jerarquía con tipografía, espacio y líneas finas.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --sunken: #efede7;
+  --ink: #17191a;
+  --ink-2: #4a5056;
+  --ink-3: #6b7176; /* 4,6:1 sobre el fondo: legible en texto pequeño */
+  --line: #e3e0d8;
+  --line-2: #d4d0c5;
+  --accent: #1f6b55;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4efe9;
+  --danger: #b4432f;
+  --danger-soft: #f6e5e0;
+  --focus: #1f6b5566;
+
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-body: 'Archivo Variable', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --r: 8px;
+  --r-lg: 12px;
+  --page: 1180px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #121413;
+    --surface: #1a1d1c;
+    --sunken: #222624;
+    --ink: #ecebe7;
+    --ink-2: #b6bab5;
+    --ink-3: #7f857f;
+    --line: #2c302e;
+    --line-2: #3a3f3c;
+    --accent: #5fb293;
+    --accent-ink: #0f1311;
+    --accent-soft: #1f2e28;
+    --danger: #e0806b;
+    --danger-soft: #3a2420;
+    --focus: #5fb29366;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #121413;
+  --surface: #1a1d1c;
+  --sunken: #222624;
+  --ink: #ecebe7;
+  --ink-2: #b6bab5;
+  --ink-3: #7f857f;
+  --line: #2c302e;
+  --line-2: #3a3f3c;
+  --accent: #5fb293;
+  --accent-ink: #0f1311;
+  --accent-soft: #1f2e28;
+  --danger: #e0806b;
+  --danger-soft: #3a2420;
+  --focus: #5fb29366;
+}
+/* ── mapa de países ── */
+:root { --map-land: #e6e3db; --map-ocean: #fbfaf7; --map-stroke: #f7f6f2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --map-land: #2a2e2c; --map-ocean: #161918; --map-stroke: #121413; } }
+:root[data-theme='dark'] { --map-land: #2a2e2c; --map-ocean: #161918; --map-stroke: #121413; }

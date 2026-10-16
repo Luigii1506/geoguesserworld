@@ -1,0 +1,43 @@
+.worldmap { display: grid; gap: 0.8rem; }
+.worldmap-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.worldmap-zoom { display: flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.worldmap-zoom button { width: 34px; height: 30px; border: none; background: none; color: var(--ink-2); font-size: 1.05rem; cursor: pointer; }
+.worldmap-zoom button + button { border-left: 1px solid var(--line); }
+.worldmap-zoom button:hover { background: var(--sunken); color: var(--ink); }
+.worldmap-stage { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--map-ocean); overflow: hidden; }
+.worldmap-stage svg { display: block; width: 100%; height: auto; cursor: grab; touch-action: none; }
+.worldmap-stage svg:active { cursor: grabbing; }
+.wm-sphere { fill: var(--map-ocean); }
+.wm-graticule { fill: none; stroke: var(--line); stroke-width: 0.5; vector-effect: non-scaling-stroke; opacity: 0.7; }
+.wm-country { fill: var(--map-land); stroke: var(--map-stroke); stroke-width: 0.6; vector-effect: non-scaling-stroke; transition: fill 0.25s ease, opacity 0.25s ease; }
+.wm-country.guided { cursor: pointer; }
+.wm-country.guided:not(.painted):hover, .wm-country.hover:not(.painted) { fill: var(--ink) !important; }
+.wm-country.dim { opacity: 0.25; }
+.wm-dot { fill: var(--accent); stroke: var(--map-ocean); stroke-width: 1; vector-effect: non-scaling-stroke; cursor: pointer; transition: fill 0.2s ease; }
+.wm-dot:hover, .wm-dot.hover { fill: var(--ink); }
+.wm-dot.dim { opacity: 0.2; }
+.wm-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); font-size: 0.9rem; }
+.wm-card {
+  position: absolute; pointer-events: none; z-index: 2; min-width: 200px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 0.75rem 0.9rem; display: grid; gap: 0.35rem;
+  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.25);
+  animation: wm-in 0.14s ease-out;
+}
+@keyframes wm-in { from { opacity: 0; } to { opacity: 1; } }
+.wm-card-name { display: flex; align-items: center; gap: 0.5rem; }
+.wm-card-name .flag { font-size: 1.5rem; line-height: 1; }
+.wm-card-name strong { font-family: var(--font-display); font-size: 1.1rem; font-weight: 500; }
+.wm-card-stats { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--ink-2); }
+.wm-card-stats b { color: var(--ink); font-weight: 600; }
+.wm-card-meta { font-size: 0.78rem; color: var(--ink-3); }
+.wm-card-cta { font-size: 0.8rem; font-weight: 600; color: var(--accent); padding-top: 0.15rem; }
+.worldmap-legend { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--ink-3); flex-wrap: wrap; }
+.wm-ramp { width: 120px; height: 8px; border-radius: 99px; background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 28%, var(--map-land)), var(--accent)); }
+.wm-none { width: 14px; height: 8px; border-radius: 99px; background: var(--map-land); margin-left: 1rem; border: 1px solid var(--line); }
+.wm-hatch-bg { fill: var(--map-land); }
+.wm-hatch-line { stroke: var(--line-2); stroke-width: 1.4; }
+.wm-country.painted { transition: fill 0.45s ease, opacity 0.3s ease; }
+.wm-country.painted.guided:hover, .wm-country.painted.hover { fill: inherit; stroke: var(--ink); stroke-width: 1.6; }
+.wm-dot.painted { stroke: var(--ink-3); }
+.wm-dot.painted:hover, .wm-dot.painted.hover { stroke: var(--ink); stroke-width: 2; }

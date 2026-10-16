@@ -1,0 +1,19 @@
+/* hoja de filtros: abajo en el móvil, panel centrado en escritorio */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.38); display: flex; align-items: flex-end; justify-content: center; animation: sheet-fade 0.18s ease-out; }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  width: 100%; max-width: 560px; max-height: 82vh; background: var(--bg); border-radius: 18px 18px 0 0;
+  display: grid; grid-template-rows: auto 1fr auto; animation: sheet-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 -12px 40px -16px rgb(0 0 0 / 0.4);
+}
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@media (min-width: 701px) { .sheet-backdrop { align-items: center; } .sheet { border-radius: 16px; max-height: 76vh; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.1rem 0.5rem; }
+.sheet-head strong { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
+.sheet-body { overflow-y: auto; padding: 0.2rem 1.1rem 1rem; display: grid; gap: 1.2rem; align-content: start; }
+.sheet-foot { padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.sheet-foot .btn { width: 100%; height: 46px; font-size: 1rem; }
+.sheet .fx-opt { padding: 0.55rem 0.6rem; font-size: 0.95rem; }
+@media (max-width: 640px) {
+  .sheet-backdrop, .gsheet { transition: opacity 0.2s ease; }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useCountryMap, countryFlag, countryLabel } from '../lib/data'
 import { REGION_ES, SOURCE_NAMES } from '../lib/labels'
 import { DataError, Lightbox, Loading } from '../components/ui'
@@ -8,10 +8,12 @@ import { guides, type VisualItem, type VisualQuery } from '../lib/guides'
 import { Img } from '../components/Img'
 import { SaveButton, StudyAllButton } from '../components/study/SaveButton'
 import { photoItem } from '../lib/study/items'
+import { CountryPicker } from '../components/geo/CountryPicker'
 
 // Explorador de fotos: una categoría, todos los países, con las imágenes de
 // todas las fuentes. Pide a la API páginas de 60 fotos (y las facetas de la
 // categoría) en lugar de descargar el índice entero.
+// Filtros en chips (como el Catálogo) y en la URL: ?tema=&tipo=&pais=&continente=&fuente=
 
 const SOURCE_BY_LETTER: Record<string, string> = { p: 'plonkit', g: 'geometas', h: 'geohints', t: 'geotips', l: 'learnablemeta', o: 'openguessr' }
 const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
@@ -22,11 +24,28 @@ const STUDY_MAX = 120
 export default function Visual() {
   const meta = useGeo('gg-visual-meta', guides.visualMeta)
   const map = useCountryMap()
-  const [cat, setCat] = useState('bollards')
-  const [sub, setSub] = useState('')
-  const [region, setRegion] = useState('')
-  const [pais, setPais] = useState('')
-  const [fuente, setFuente] = useState('')
+  const [params, setParams] = useSearchParams()
+  const cat = params.get('tema') ?? 'bollards'
+  const sub = params.get('tipo') ?? ''
+  const region = params.get('continente') ?? ''
+  const pais = params.get('pais') ?? ''
+  const fuente = params.get('fuente') ?? ''
+  const set = (patch: Record<string, string | null>) => {
+    setBox(null)
+    setParams((p) => {
+      const n = new URLSearchParams(p)
+      for (const [k, v] of Object.entries(patch)) (v ? n.set(k, v) : n.delete(k))
+      if (n.get('tema') === 'bollards') n.delete('tema')
+      return n
+    }, { replace: true })
+  }
+  // en el móvil las filas de chips se deslizan: la opción elegida, a la vista
+  useEffect(() => {
+    for (const el of document.querySelectorAll<HTMLElement>('.vis-groups .on, .vis-topics .on')) {
+      const row = el.parentElement!
+      if (row.scrollWidth > row.clientWidth) row.scrollLeft += el.getBoundingClientRect().left - row.getBoundingClientRect().left - 16
+    }
+  }, [cat, meta.data])
   const [items, setItems] = useState<VisualItem[]>([])
   const [total, setTotal] = useState(0)
   const [facets, setFacets] = useState<{ subs: [string, number][]; countries: Record<string, number> } | null>(null)
@@ -68,10 +87,10 @@ export default function Visual() {
   const label = (code: string | null, raw?: string) => (code ? countryLabel(map, code) : raw ?? '—')
   const countries = Object.keys(facets?.countries ?? {}).sort((a, b) => label(a).localeCompare(label(b), 'es'))
   const photos = Object.values(meta.data.counts).reduce((a, b) => a + b, 0)
-  const pick = (fn: () => void) => {
-    fn()
-    setBox(null)
-  }
+  const cats = meta.data.categories.filter((c) => (meta.data!.counts[c.id] ?? 0) > 0)
+  const groups = [...new Set(cats.map((c) => c.grp))]
+  const group = cats.find((c) => c.id === cat)?.grp ?? groups[0]
+  const countryOptions = countries.map((c) => ({ code: c, n: facets!.countries[c], flag: countryFlag(map, c), name: label(c), alt: map.get(c)?.name ?? '' }))
 
   return (
     <div>
@@ -83,40 +102,45 @@ export default function Visual() {
         </p>
       </header>
 
-      <div className="toolbar">
-        <select className="select" value={cat} onChange={(e) => pick(() => { setCat(e.target.value); setSub(''); setPais('') })}>
-          {[...new Set(meta.data.categories.map((c) => c.grp))].map((g) => (
-            <optgroup key={g} label={g}>
-              {meta.data!.categories.filter((c) => c.grp === g && (meta.data!.counts[c.id] ?? 0) > 0).map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({meta.data!.counts[c.id]})</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        <select className="select" value={pais} onChange={(e) => pick(() => setPais(e.target.value))}>
-          <option value="">Todos los países ({countries.length})</option>
-          {countries.map((c) => <option key={c} value={c}>{label(c)}</option>)}
-        </select>
-        <select className="select" value={fuente} onChange={(e) => pick(() => setFuente(e.target.value))}>
-          <option value="">Todas las fuentes</option>
-          {Object.entries(SOURCE_BY_LETTER).map(([k, v]) => <option key={k} value={k}>{SOURCE_NAMES[v]}</option>)}
-        </select>
+      {/* tema: el grupo y, dentro, cada tema con su número de fotos */}
+      <nav className="cat-types vis-groups" aria-label="Grupo de temas">
+        {groups.map((g) => (
+          <button key={g} className={`cat-type ${g === group ? 'on' : ''}`} onClick={() => g !== group && set({ tema: cats.find((c) => c.grp === g)!.id, tipo: null, pais: null })}>
+            {g}
+          </button>
+        ))}
+      </nav>
+      <div className="chips vis-topics" role="group" aria-label="Tema">
+        {cats.filter((c) => c.grp === group).map((c) => (
+          <button key={c.id} className={`chip ${c.id === cat ? 'on' : ''}`} onClick={() => set({ tema: c.id, tipo: null, pais: null })}>
+            {c.name} <span className="muted">{meta.data!.counts[c.id].toLocaleString('es')}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="toolbar vis-toolbar">
         <div className="seg">
-          <button className={!region ? 'on' : ''} onClick={() => pick(() => setRegion(''))}>Todo</button>
-          {REGIONS.map((r) => <button key={r} className={region === r ? 'on' : ''} onClick={() => pick(() => setRegion(r))}>{REGION_ES[r]}</button>)}
+          <button className={!region ? 'on' : ''} onClick={() => set({ continente: null })}>Todo</button>
+          {REGIONS.map((r) => <button key={r} className={region === r ? 'on' : ''} onClick={() => set({ continente: r, pais: null })}>{REGION_ES[r]}</button>)}
         </div>
+        {countryOptions.length > 0 && <CountryPicker value={pais} onChange={(v) => set({ pais: v || null })} options={countryOptions} />}
+      </div>
+      <div className="chips vis-sources" role="group" aria-label="Fuente">
+        <button className={`chip ${!fuente ? 'on' : ''}`} onClick={() => set({ fuente: null })}>Todas las fuentes</button>
+        {Object.entries(SOURCE_BY_LETTER).map(([k, v]) => (
+          <button key={k} className={`chip ${fuente === k ? 'on' : ''}`} onClick={() => set({ fuente: fuente === k ? null : k })}>{SOURCE_NAMES[v]}</button>
+        ))}
       </div>
 
       {(facets?.subs.length ?? 0) > 0 && (
-        <div className="toolbar">
-          <div className="chips">
-            <button className={`chip ${!sub ? 'on' : ''}`} onClick={() => pick(() => setSub(''))}>Todos los tipos</button>
-            {facets!.subs.map(([s, n]) => (
-              <button key={s} className={`chip ${sub === s ? 'on' : ''}`} onClick={() => pick(() => setSub(s))}>
-                {s.replace(/_/g, ' ')} <span className="muted">{n}</span>
-              </button>
-            ))}
-          </div>
+        <div className="chips vis-subs" role="group" aria-label="Tipo">
+          <span className="eyebrow">Tipo</span>
+          <button className={`chip ${!sub ? 'on' : ''}`} onClick={() => set({ tipo: null })}>Todos</button>
+          {facets!.subs.map(([s, n]) => (
+            <button key={s} className={`chip ${sub === s ? 'on' : ''}`} onClick={() => set({ tipo: s })}>
+              {s.replace(/_/g, ' ')} <span className="muted">{n}</span>
+            </button>
+          ))}
         </div>
       )}
 

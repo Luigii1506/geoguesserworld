@@ -1,0 +1,55 @@
+/* ── base ── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { margin: 0; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-family: var(--font-display); font-weight: 500; font-size: 2.1rem; letter-spacing: -0.02em; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 1.45rem; }
+h3 { font-size: 1rem; }
+p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+img { max-width: 100%; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+::selection { background: var(--accent-soft); }
+code { font-family: var(--font-mono); font-size: 0.85em; background: var(--sunken); padding: 0.1em 0.35em; border-radius: 4px; }
+.muted { color: var(--ink-3); }
+.small { font-size: 0.82rem; }
+.eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.lead { font-size: 1.08rem; color: var(--ink-2); max-width: 62ch; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+@media (max-width: 760px) {
+  h1 { font-size: 1.7rem; }
+}
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 1.2rem 1.3rem; }
+.empty { padding: 3rem 1rem; text-align: center; color: var(--ink-3); border: 1px dashed var(--line-2); border-radius: var(--r-lg); }
+.note { padding: 0.8rem 1rem; border-radius: var(--r); background: var(--accent-soft); color: var(--ink); font-size: 0.92rem; }
+/* ── visor de imágenes (se monta en <body> con un portal) ── */
+@keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+/* transición al filtrar */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.32s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+picture { display: contents; }
+.data-error { display: grid; justify-items: center; gap: 0.9rem; }
+.data-error p { margin: 0; max-width: 46ch; }
+/* ── atajos de teclado ── */
+kbd {
+  display: inline-grid; place-items: center; min-width: 1.35em; height: 1.35em; padding: 0 0.25em; margin-right: 0.35em;
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; background: var(--sunken);
+  font-family: var(--font-mono); font-size: 0.7em; line-height: 1; color: var(--ink-3); vertical-align: 0.1em;
+}
+@media (hover: none) { kbd { display: none; } }
+.empty-progress p { color: var(--ink-2); font-size: 0.92rem; }
+.empty-progress .btn { justify-self: start; }
+@media (max-width: 700px) {
+  .lead { font-size: 1rem; line-height: 1.5; }
+}

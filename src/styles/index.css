@@ -1,0 +1,30 @@
+/* Estilos de GeoMastery, en este orden (importa: lo de abajo pisa a lo de arriba con la misma especificidad)
+   base/        tokens (colores, tipos, modo oscuro), elementos, estructura y controles
+   components/  piezas compartidas: pistas, galerías, visor, hojas, mapa del mundo, lugares, estudio…
+   pages/       lo propio de cada sección
+   Cada archivo agrupa las reglas de un componente; sus @media van junto a ellas. */
+@import "./base/tokens.css";
+@import "./base/base.css";
+@import "./base/layout.css";
+@import "./base/controls.css";
+@import "./components/hint.css";
+@import "./components/gallery.css";
+@import "./components/lightbox.css";
+@import "./components/sheet.css";
+@import "./components/worldmap.css";
+@import "./components/place.css";
+@import "./components/skeleton.css";
+@import "./components/global-search.css";
+@import "./components/study.css";
+@import "./pages/home.css";
+@import "./pages/countries.css";
+@import "./pages/country-guide.css";
+@import "./pages/catalog.css";
+@import "./pages/explore.css";
+@import "./pages/duel.css";
+@import "./pages/where-am-i.css";
+@import "./pages/maps.css";
+@import "./pages/geography.css";
+@import "./pages/train.css";
+@import "./pages/saved.css";
+@import "./pages/login.css";

@@ -1,0 +1,13 @@
+/* filtros en chips: grupo de temas → tema → continente y país → fuente → tipo */
+.vis-topics { margin: -0.2rem 0 1rem; }
+.vis-toolbar { margin-bottom: 0.6rem; }
+.vis-sources, .vis-subs { margin-bottom: 0.8rem; align-items: center; }
+.vis-sources .chip, .vis-subs .chip { font-size: 0.8rem; }
+.vis-subs .eyebrow { margin-right: 0.2rem; }
+@media (max-width: 700px) {
+  .vis-topics, .vis-sources, .vis-subs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -1rem; margin-right: -1rem; padding: 0 1rem; }
+  .vis-groups { margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
+  .vis-topics::-webkit-scrollbar, .vis-sources::-webkit-scrollbar, .vis-subs::-webkit-scrollbar { display: none; }
+  .vis-topics .chip, .vis-sources .chip, .vis-subs .chip, .vis-subs .eyebrow { flex: none; }
+  .vis-toolbar .cp { flex: 1 1 100%; max-width: none; }
+}
