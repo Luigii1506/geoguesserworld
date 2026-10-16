@@ -152,6 +152,22 @@ Las claves de `gg_quiz` son las del progreso del usuario (`t:<id>`, `p:<id>:<ima
 cambiar de cómo se elige no hace perder el repaso. Con usuarios en Neon, la sesión podrá
 leer el progreso en el servidor en lugar de recibirlo en el cuerpo.
 
+### Leer pocas filas (D1 cobra por fila leída)
+
+- **Precalculado** (una fila por petición): fichas de país y región, meta, contadores de cada
+  lugar × tipo (también los que dan cero) y los carruseles fijos de Geografía con la primera
+  página de su «Ver todos» ([geo/strips.json](../geo/strips.json), compartido por la app y el
+  precálculo). Las listas se guardan en `api_cache` con sus parámetros en orden alfabético
+  (`cachePath`, worker/src/geo/router.js).
+- **Al momento**, las listas a medida. Recorriendo un índice ordenado, los filtros por país,
+  etiqueta o «dentro de» se comprueban lugar por lugar (`EXISTS`); filtrando primero, un país
+  con tipos usa su país principal (`entity_cc`) más los lugares de varios países
+  (`entity_multi`, índice parcial de ~3.000), sin recorrer los ~21.000 lugares de Italia.
+- Medido en local con `sqlite3 .scanstats` (≈ `rows_read` de D1) y en producción con la
+  cabecera `x-d1-rows-read`. Un recorrido típico por Geografía: ~4.400 filas (antes, ~540.000).
+- D1 gratis: 5 M filas leídas y 100.000 escritas al día, y **500 MB por base** (la de
+  geografía ocupa ~400 MB: no precalcular más sin mirar el tamaño).
+
 ### Publicar en D1 sin gastar escrituras
 
 D1 gratis permite 100 000 filas escritas al día y la base tiene ~3,3 M. Tras cada
@@ -159,7 +175,8 @@ publicación se guarda una copia de lo publicado (`data/geo-work/d1-published.db
 siguiente compara tabla a tabla (`EXCEPT`) y envía solo las filas nuevas (`INSERT`), las
 cambiadas (`UPDATE` de las columnas que cambian: D1 cobra cada índice que toca, y un
 `INSERT OR REPLACE` en `entity` cuesta 6 escrituras) y las borradas (`DELETE`). Si cambia el esquema, o con `--full`,
-se borra y recarga todo. Con `--dry` se ve cuántas filas iría a escribir.
+se borra y recarga todo; si solo se añadieron índices, se crean sin recargar nada. Con
+`--dry` se ve cuántas filas iría a escribir.
 
 ### Caché en el navegador (PWA)
 

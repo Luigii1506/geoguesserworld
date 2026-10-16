@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS entity (
 );
 CREATE INDEX IF NOT EXISTS entity_kind ON entity(kind, rank DESC);
 CREATE INDEX IF NOT EXISTS entity_cc ON entity(cc, kind, rank DESC);
+-- los que están en varios países (ccs): con entity_cc, filtrar por país sin recorrer entity_country
+CREATE INDEX IF NOT EXISTS entity_multi ON entity(kind) WHERE ccs IS NOT NULL;
 CREATE INDEX IF NOT EXISTS entity_admin1 ON entity(admin1, kind);
 CREATE INDEX IF NOT EXISTS entity_geo ON entity(lat, lng);
 -- "con pistas de GeoGuessr": solo unos miles de lugares, índice parcial

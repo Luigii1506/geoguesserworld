@@ -12,6 +12,7 @@ import { Omnibox } from '../components/geo/Omnibox'
 import { Strip } from '../components/geo/Strip'
 import { Sheet } from '../components/geo/Sheet'
 import { Img } from '../components/Img'
+import STRIPS from '../../geo/strips.json'
 import { StudyAllButton } from '../components/study/SaveButton'
 import { placeItem } from '../lib/study/items'
 import { KIND_PLURAL } from '../lib/geo'
@@ -27,38 +28,19 @@ const WorldMap = lazy(() => import('../components/WorldMap'))
 // Todo lo filtra y ordena la API (docs/geo.md).
 
 const CONTINENTS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania']
-const PAGE = 36
+// la primera página de cada «Ver todos» de los carruseles está precalculada con este tamaño
+const PAGE = STRIPS.pageSize
 // órdenes antiguos en enlaces guardados
 const ORDER_ALIAS: Record<string, string> = {
   imp: 'rank', ele: 'elevation', len: 'length', pop: 'population', q: 'discharge', prom: 'prominence',
   le: 'last_eruption', vis: 'visitors', nc: 'countries', az: 'name',
 }
 
-// rankings de la portada
-const RANKINGS: { title: string; query: ListQuery; params: Record<string, string> }[] = [
-  { title: 'Los volcanes más altos', query: { kind: 'volcano', sort: 'elevation' }, params: { tipo: 'montanas', sub: 'volcano', orden: 'elevation', vista: 'ranking' } },
-  { title: 'Las montañas más altas', query: { kind: 'mountain', sort: 'elevation' }, params: { tipo: 'montanas', sub: 'mountain', orden: 'elevation', vista: 'ranking' } },
-  { title: 'Las áreas urbanas más pobladas', query: { kind: 'urban', sort: 'population' }, params: { tipo: 'ciudades', sub: 'urban', orden: 'population', vista: 'ranking' } },
-  { title: 'Los ríos más largos', query: { kind: 'river', sort: 'length' }, params: { tipo: 'agua', sub: 'river', orden: 'length', vista: 'ranking' } },
-  { title: 'Patrimonio de la Humanidad', query: { tags: ['unesco'], sort: 'rank' }, params: { unesco: '1' } },
-  { title: 'Volcanes activos', query: { kind: 'volcano', tags: ['activo'], sort: 'rank' }, params: { tipo: 'montanas', sub: 'volcano', estado: 'activo' } },
-  { title: 'Las islas más grandes', query: { kind: 'island', sort: 'area' }, params: { tipo: 'islas', sub: 'island', orden: 'area', vista: 'ranking' } },
-  { title: 'Los lagos más grandes', query: { kind: 'lake', sort: 'area' }, params: { tipo: 'agua', sub: 'lake', orden: 'area', vista: 'ranking' } },
-  { title: 'Los desiertos más extensos', query: { kind: 'desert', sort: 'area' }, params: { tipo: 'relieve', sub: 'desert', orden: 'area', vista: 'ranking' } },
-]
-
-// lo más destacado de un país: un carrusel por tipo
-const HIGHLIGHTS: { title: string; query: ListQuery; params: Record<string, string> }[] = [
-  { title: 'Ciudades', query: { kind: 'city', sort: 'population' }, params: { tipo: 'ciudades', sub: 'city', orden: 'population' } },
-  { title: 'Volcanes y montañas', query: { family: 'montanas', sort: 'elevation' }, params: { tipo: 'montanas', orden: 'elevation' } },
-  { title: 'Mares, ríos y lagos', query: { family: 'agua', sort: 'rank' }, params: { tipo: 'agua' } },
-  { title: 'Monumentos', query: { family: 'monumentos', sort: 'rank' }, params: { tipo: 'monumentos' } },
-  { title: 'Parques y naturaleza', query: { family: 'naturaleza', sort: 'rank' }, params: { tipo: 'naturaleza' } },
-  { title: 'Islas y penínsulas', query: { family: 'islas', sort: 'area' }, params: { tipo: 'islas', orden: 'area' } },
-  { title: 'Llanuras, mesetas y desiertos', query: { family: 'relieve', sort: 'area' }, params: { tipo: 'relieve', orden: 'area' } },
-  { title: 'Templos e iglesias', query: { family: 'templos', sort: 'rank' }, params: { tipo: 'templos' } },
-  { title: 'Arqueología', query: { family: 'arqueologia', sort: 'rank' }, params: { tipo: 'arqueologia' } },
-]
+// carruseles: rankings de la portada y lo más destacado de un país (geo/strips.json, el mismo
+// archivo que usa el precálculo: sus respuestas se sirven leyendo una fila)
+type StripDef = { title: string; query: ListQuery; params: Record<string, string> }
+const RANKINGS = STRIPS.rankings as unknown as StripDef[]
+const HIGHLIGHTS = STRIPS.highlights as unknown as StripDef[]
 
 type Countries = Map<string, GeoCountryRow>
 
@@ -73,7 +55,7 @@ function ListStrip({ title, query, countries, onOpen, onAll, ranked, min = 3 }: 
   min?: number
 }) {
   const key = `strip:${JSON.stringify(query)}`
-  const { data } = useGeo(key, () => geo.list({ ...query, limit: 12 }))
+  const { data } = useGeo(key, () => geo.list({ ...query, limit: STRIPS.stripLimit }))
   const byValue = SORT.get(query.sort ?? 'rank')?.format !== undefined
   const items = (data?.items ?? []).filter((c) => !byValue || c.value != null)
   if (data && items.length < min) return null
@@ -97,7 +79,7 @@ function FamilyTiles({ counts, onPick }: { counts: Record<string, number>; onPic
   )
 }
 function FamilyTile({ id, label, n, onPick }: { id: string; label: string; n: number; onPick: (id: string) => void }) {
-  const { data } = useGeo(`tile:${id}`, () => geo.list({ family: id, photo: true, famous: true, sort: 'rank', limit: 1 }))
+  const { data } = useGeo(`tile:${id}`, () => geo.list({ family: id, ...STRIPS.familyTile }))
   const img = data?.items[0]?.thumb
   return (
     <button className="ftile" onClick={() => onPick(id)}>
@@ -149,7 +131,7 @@ export default function Geography() {
   const list = useGeoPages(landing || countryHome ? null : query, PAGE)
   const country = useGeo(cc ? `country:${cc}` : null, () => geo.country(cc))
   // cuántos hay de cada tipo en todo el mundo (para la portada)
-  const world = useGeo(landing ? 'world-facets' : null, () => geo.list({ limit: 1, facets: true }))
+  const world = useGeo(landing ? 'world-facets' : null, () => geo.list(STRIPS.worldFacets))
 
   const setMany = (changes: Record<string, string>, top = false) => {
     const next = new URLSearchParams(params)

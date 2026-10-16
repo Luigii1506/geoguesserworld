@@ -1,0 +1,237 @@
+{
+  "_doc": "Carruseles de Geografía (src/pages/Geography.tsx) y la primera página de su «Ver todos» (pageSize). Sus respuestas se precalculan al construir la base (pipeline/geo/precompute.mjs): servirlas lee una fila de D1.",
+  "stripLimit": 12,
+  "rankings": [
+    {
+      "title": "Los volcanes más altos",
+      "query": {
+        "kind": "volcano",
+        "sort": "elevation"
+      },
+      "params": {
+        "tipo": "montanas",
+        "sub": "volcano",
+        "orden": "elevation",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Las montañas más altas",
+      "query": {
+        "kind": "mountain",
+        "sort": "elevation"
+      },
+      "params": {
+        "tipo": "montanas",
+        "sub": "mountain",
+        "orden": "elevation",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Las áreas urbanas más pobladas",
+      "query": {
+        "kind": "urban",
+        "sort": "population"
+      },
+      "params": {
+        "tipo": "ciudades",
+        "sub": "urban",
+        "orden": "population",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Los ríos más largos",
+      "query": {
+        "kind": "river",
+        "sort": "length"
+      },
+      "params": {
+        "tipo": "agua",
+        "sub": "river",
+        "orden": "length",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Patrimonio de la Humanidad",
+      "query": {
+        "tags": [
+          "unesco"
+        ],
+        "sort": "rank"
+      },
+      "params": {
+        "unesco": "1"
+      }
+    },
+    {
+      "title": "Volcanes activos",
+      "query": {
+        "kind": "volcano",
+        "tags": [
+          "activo"
+        ],
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "montanas",
+        "sub": "volcano",
+        "estado": "activo"
+      }
+    },
+    {
+      "title": "Las islas más grandes",
+      "query": {
+        "kind": "island",
+        "sort": "area"
+      },
+      "params": {
+        "tipo": "islas",
+        "sub": "island",
+        "orden": "area",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Los lagos más grandes",
+      "query": {
+        "kind": "lake",
+        "sort": "area"
+      },
+      "params": {
+        "tipo": "agua",
+        "sub": "lake",
+        "orden": "area",
+        "vista": "ranking"
+      }
+    },
+    {
+      "title": "Los desiertos más extensos",
+      "query": {
+        "kind": "desert",
+        "sort": "area"
+      },
+      "params": {
+        "tipo": "relieve",
+        "sub": "desert",
+        "orden": "area",
+        "vista": "ranking"
+      }
+    }
+  ],
+  "highlights": [
+    {
+      "title": "Ciudades",
+      "query": {
+        "kind": "city",
+        "sort": "population"
+      },
+      "params": {
+        "tipo": "ciudades",
+        "sub": "city",
+        "orden": "population"
+      }
+    },
+    {
+      "title": "Volcanes y montañas",
+      "query": {
+        "family": "montanas",
+        "sort": "elevation"
+      },
+      "params": {
+        "tipo": "montanas",
+        "orden": "elevation"
+      }
+    },
+    {
+      "title": "Mares, ríos y lagos",
+      "query": {
+        "family": "agua",
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "agua"
+      }
+    },
+    {
+      "title": "Monumentos",
+      "query": {
+        "family": "monumentos",
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "monumentos"
+      }
+    },
+    {
+      "title": "Parques y naturaleza",
+      "query": {
+        "family": "naturaleza",
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "naturaleza"
+      }
+    },
+    {
+      "title": "Islas y penínsulas",
+      "query": {
+        "family": "islas",
+        "sort": "area"
+      },
+      "params": {
+        "tipo": "islas",
+        "orden": "area"
+      }
+    },
+    {
+      "title": "Llanuras, mesetas y desiertos",
+      "query": {
+        "family": "relieve",
+        "sort": "area"
+      },
+      "params": {
+        "tipo": "relieve",
+        "orden": "area"
+      }
+    },
+    {
+      "title": "Templos e iglesias",
+      "query": {
+        "family": "templos",
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "templos"
+      }
+    },
+    {
+      "title": "Arqueología",
+      "query": {
+        "family": "arqueologia",
+        "sort": "rank"
+      },
+      "params": {
+        "tipo": "arqueologia"
+      }
+    }
+  ],
+  "familyTile": {
+    "photo": true,
+    "famous": true,
+    "sort": "rank",
+    "limit": 1
+  },
+  "atlasCities": {
+    "kind": "urban",
+    "sort": "population",
+    "limit": 14
+  },
+  "worldFacets": {
+    "limit": 1,
+    "facets": true
+  },
+  "pageSize": 36
+}

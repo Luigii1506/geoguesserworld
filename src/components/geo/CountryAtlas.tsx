@@ -5,6 +5,7 @@ import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import { feature } from 'topojson-client'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { Topology } from 'topojson-specification'
+import STRIPS from '../../../geo/strips.json'
 import { geo, geoAssetUrl, useGeo, type GeoCard, type GeoCountry, type GeoLayer } from '../../lib/geo'
 import { nf } from '../../lib/geoFormat'
 
@@ -60,7 +61,7 @@ export function CountryAtlas({ country, onOpen }: Props) {
   const fullTopo = useTopo(detailed ? vectorAsset?.path : undefined)
   const topo = fullTopo ?? liteTopo
   // ciudades = áreas urbanas (GHSL): una por aglomeración, sin alcaldías ni barrios sueltos
-  const cities = useGeo(`atlas-cities:${country.cc}`, () => geo.list({ cc: country.cc, kind: 'urban', sort: 'population', limit: 14 }))
+  const cities = useGeo(`atlas-cities:${country.cc}`, () => geo.list({ cc: country.cc, ...STRIPS.atlasCities }))
   const svgRef = useRef<SVGSVGElement>(null)
   const gRef = useRef<SVGGElement>(null)
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown>>()

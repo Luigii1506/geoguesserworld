@@ -7,10 +7,21 @@
 import { handleGeo } from './api.js'
 import { handleGuides } from './gg.js'
 
-/** Ruta de caché de una petición (sin /api/), o null si lleva parámetros (la clave k, t y la versión v no cuentan). */
+const IGNORED = new Set(['k', 't', 'v'])
+
+/**
+ * Clave de caché de una petición (sin /api/), o null si no se precalcula. Sin parámetros, la
+ * ruta (fichas, meta…). Las listas (geo/list?…) llevan sus parámetros en orden alfabético:
+ * así los carruseles fijos de geo/strips.json se sirven leyendo una fila. La clave k, t y la
+ * versión v no cuentan; lo aleatorio (Sorpréndeme) no se guarda.
+ */
 export function cachePath(url) {
-  for (const [k] of url.searchParams) if (k !== 'k' && k !== 't' && k !== 'v') return null
-  return url.pathname.replace(/^\/api\//, '')
+  const params = [...url.searchParams].filter(([k]) => !IGNORED.has(k))
+  const base = url.pathname.replace(/^\/api\//, '')
+  if (!params.length) return base
+  if (base !== 'geo/list' || url.searchParams.get('sort') === 'random') return null
+  params.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return `${base}?${new URLSearchParams(params)}`
 }
 
 /** La respuesta calculada al momento, sin mirar la caché (la usa el precálculo). */

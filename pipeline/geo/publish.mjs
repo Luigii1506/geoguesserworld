@@ -140,7 +140,23 @@ function tablesOf(db) {
 }
 
 /** Esquema (para saber si una publicación incremental es posible). */
-const schemaOf = (db) => db.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'entity_fts_%' ORDER BY name").all().map((r) => `${r.type}|${r.name}|${r.sql}`).join('\n')
+const schemaRows = (db) => db.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'entity_fts_%' ORDER BY name").all()
+
+/**
+ * ¿Se puede publicar de forma incremental? Sí con el mismo esquema, y también si solo se
+ * añadieron índices: se crean en D1 (escribe una fila por entrada del índice) en lugar de
+ * borrar y recargar las ~3,3 M filas. Devuelve los CREATE INDEX nuevos, o null.
+ */
+function schemaChanges(old, cur) {
+  const def = (r) => `${r.type}|${r.sql}`
+  const before = new Map(schemaRows(old).map((r) => [r.name, def(r)]))
+  const now = new Map(schemaRows(cur).map((r) => [r.name, r]))
+  // nada de lo que había puede faltar ni cambiar
+  for (const [name, d] of before) if (!now.has(name) || def(now.get(name)) !== d) return null
+  const added = [...now.values()].filter((r) => !before.has(r.name))
+  if (added.some((r) => r.type !== 'index' || !r.sql)) return null
+  return added.map((r) => r.sql.replace(/^CREATE INDEX (?!IF NOT EXISTS)/i, 'CREATE INDEX IF NOT EXISTS '))
+}
 
 /**
  * SQL para D1. Completo: DROP + esquema + todas las filas. Incremental (si hay copia de lo
@@ -150,15 +166,19 @@ export async function exportSql(file = path.join(WORK, 'd1.sql'), { full = false
   if (!existsSync(GEO_DB)) throw new Error('falta data/geo.db: npm run pipeline -- geo build')
   const db = new DatabaseSync(GEO_DB, { readOnly: true })
   let incremental = !full && existsSync(SNAPSHOT)
+  let newIndexes = []
   if (incremental) {
     db.exec(`ATTACH DATABASE '${SNAPSHOT.replace(/'/g, "''")}' AS old`)
     const old = new DatabaseSync(SNAPSHOT, { readOnly: true })
-    if (schemaOf(old) !== schemaOf(db)) incremental = false
+    const changes = schemaChanges(old, db)
     old.close()
+    if (changes) newIndexes = changes
+    else incremental = false
   }
   const w = sqlWriter(file)
   const tables = tablesOf(db)
   if (incremental) {
+    for (const sql of newIndexes) await w.write(`${sql};\n`)
     for (const { t, cols, pk, where } of tables) {
       const list = cols.join(', ')
       const keys = pk.join(', ')
@@ -182,7 +202,7 @@ export async function exportSql(file = path.join(WORK, 'd1.sql'), { full = false
   await w.write('PRAGMA optimize;\n')
   await w.end()
   db.close()
-  return { file, rows: w.rows, bytes: statSync(file).size, incremental }
+  return { file, rows: w.rows + newIndexes.length, bytes: statSync(file).size, incremental, newIndexes: newIndexes.length }
 }
 
 /** Tras publicar, la copia de lo que hay en D1 (para la próxima publicación incremental). */
@@ -221,8 +241,8 @@ function ensureD1() {
 
 async function publishD1(dry, { full = false } = {}) {
   const t0 = Date.now()
-  const { file, rows, bytes, incremental } = await exportSql(undefined, { full })
-  console.log(`[publish] SQL ${incremental ? 'incremental' : 'completo'}: ${rows} filas · ${(bytes / 1e6).toFixed(1)} MB → ${path.relative(ROOT, file)}`)
+  const { file, rows, bytes, incremental, newIndexes } = await exportSql(undefined, { full })
+  console.log(`[publish] SQL ${incremental ? 'incremental' : 'completo'}: ${rows} filas${newIndexes ? ` (${newIndexes} índices nuevos)` : ''} · ${(bytes / 1e6).toFixed(1)} MB → ${path.relative(ROOT, file)}`)
   if (dry) return
   if (incremental && rows === 0) return console.log('[publish] D1 ya está al día')
   const id = ensureD1()
@@ -352,11 +372,13 @@ export async function publish(args) {
   const what = args.filter((a) => !a.startsWith('--'))
   if (!what.length || what.includes('d1')) await publishD1(dry, { full: args.includes('--full') })
   if (!what.length || what.includes('r2')) await publishR2(dry)
-  // el manifiesto lleva la versión de D1: si se publica D1, también las guías (solo sube lo que cambió)
-  if (!what.length || what.includes('community') || what.includes('d1')) await publishCommunity(dry)
   if (!dry && what.includes('secrets')) publishSecrets()
+  // el Worker antes que el manifiesto: el manifiesto lleva la versión nueva de la API, y si la
+  // pidiera el Worker anterior guardaría en la caché del borde respuestas calculadas a su manera
   if (!dry && (!what.length || what.includes('worker'))) {
     console.log('[publish] Worker: desplegando…')
     wrangler(['deploy'], { inherit: true })
   }
+  // el manifiesto lleva la versión de D1: si se publica D1, también las guías (solo sube lo que cambió)
+  if (!what.length || what.includes('community') || what.includes('d1')) await publishCommunity(dry)
 }

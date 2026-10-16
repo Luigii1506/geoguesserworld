@@ -45,20 +45,40 @@ function ftsQuery(q) {
   return words.length ? words.map((w) => `"${w}"*`).join(' ') : null
 }
 
-/** Filtros comunes de list (WHERE + parámetros). */
-function filters(p, { skipKind = false, skipTags = false, skipHints = false } = {}) {
+/**
+ * Filtros comunes de list (WHERE + parámetros). Dos formas para los que miran otra tabla
+ * (país, etiqueta, dentro de):
+ *   · IN (SELECT …): se calcula una vez la lista de lugares que cumplen. Bien al filtrar primero.
+ *   · EXISTS correlacionado (correlated): se comprueba lugar por lugar con la clave primaria.
+ *     Bien al recorrer un índice ordenado: si no, para la primera página de "ciudades de
+ *     Italia" se construiría antes la lista de los 21.000 lugares de Italia.
+ */
+function filters(p, { skipKind = false, skipTags = false, skipHints = false, correlated = false } = {}) {
   const where = []
   const params = []
-  const kinds = [...list(p.get('kind')), ...(p.get('family') ? FAMILY.get(p.get('family'))?.kinds ?? [] : [])]
+  const family = p.get('family')
+  if (family && !FAMILY.has(family)) throw new HttpError(400, 'tipo desconocido')
+  const kinds = [...list(p.get('kind')), ...(family ? FAMILY.get(family).kinds : [])]
   if (kinds.length && !skipKind) {
     where.push(`e.kind IN (${placeholders(kinds.length)})`)
     params.push(...kinds)
-  } else if (!p.get('kind') && !p.get('family') && !p.get('q')) {
+  } else if (!p.get('kind') && !family && !p.get('q')) {
     // sin tipo ni búsqueda: lugares, no divisiones administrativas (al buscar, sí: "Jalisco" es el estado)
     where.push("e.kind NOT IN ('country', 'admin1')")
   }
   const ccs = list(p.get('cc'))
-  if (ccs.length) {
+  if (ccs.length && correlated) {
+    where.push(`EXISTS (SELECT 1 FROM entity_country ec WHERE ec.entity_id = e.id AND ec.cc IN (${placeholders(ccs.length)}))`)
+    params.push(...ccs)
+  } else if (ccs.length === 1 && kinds.length && !skipKind) {
+    // un país y unos tipos: los de ese país principal (índice entity_cc) más los de varios
+    // países que lo incluyen (índice parcial entity_multi, ~3.000 lugares). Lo mismo que
+    // entity_country, sin recorrer los 21.000 lugares de Italia para quedarse con 139 ciudades.
+    const k = placeholders(kinds.length)
+    where.push(`(e.id IN (SELECT id FROM entity WHERE cc = ? AND kind IN (${k}))
+      OR e.id IN (SELECT id FROM entity WHERE ccs IS NOT NULL AND kind IN (${k}) AND instr(',' || ccs || ',', ',' || ? || ',') > 0))`)
+    params.push(ccs[0], ...kinds, ...kinds, ccs[0])
+  } else if (ccs.length) {
     where.push(`e.id IN (SELECT entity_id FROM entity_country WHERE cc IN (${placeholders(ccs.length)}))`)
     params.push(...ccs)
   }
@@ -72,12 +92,14 @@ function filters(p, { skipKind = false, skipTags = false, skipHints = false } = 
     params.push(p.get('admin1'))
   }
   if (p.get('within')) {
-    where.push("e.id IN (SELECT subject FROM relation WHERE object = ? AND predicate IN ('in_range', 'in_urban', 'part_of', 'in_admin1'))")
+    where.push(correlated
+      ? "EXISTS (SELECT 1 FROM relation r WHERE r.subject = e.id AND r.object = ? AND r.predicate IN ('in_range', 'in_urban', 'part_of', 'in_admin1'))"
+      : "e.id IN (SELECT subject FROM relation WHERE object = ? AND predicate IN ('in_range', 'in_urban', 'part_of', 'in_admin1'))")
     params.push(p.get('within'))
   }
   if (!skipTags)
     for (const t of list(p.get('tags'))) {
-      where.push('e.id IN (SELECT entity_id FROM entity_tag WHERE tag = ?)')
+      where.push(correlated ? 'EXISTS (SELECT 1 FROM entity_tag et WHERE et.tag = ? AND et.entity_id = e.id)' : 'e.id IN (SELECT entity_id FROM entity_tag WHERE tag = ?)')
       params.push(t)
     }
   const match = ftsQuery(p.get('q'))
@@ -156,10 +178,12 @@ async function sortCount(db, key) {
  *   · filtrar primero y ordenar lo que queda: ~ total filas (bueno si el filtro es selectivo)
  * Se elige el más barato con el total ya conocido; CROSS JOIN fija el orden de lectura.
  */
-async function sortedRows(db, { where, params, key, asc, limit, offset, total }) {
+async function sortedRows(db, p, { key, asc, limit, offset, total }) {
   const n = await sortCount(db, key)
-  const and = where ? `${where} AND` : 'WHERE'
   const indexFirst = total === Infinity || (total > 0 && ((offset + limit) * n) / total < total)
+  // al recorrer el índice, los filtros se comprueban lugar por lugar (EXISTS); al filtrar primero, en bloque (IN)
+  const { where, params } = filters(p, { correlated: indexFirst })
+  const and = where ? `${where} AND` : 'WHERE'
   const sql = indexFirst
     ? `SELECT ${CARD_COLS}, s.value AS sort_value FROM entity_sort s CROSS JOIN entity e ON e.id = s.entity_id
        ${and} s.key = ? ORDER BY s.value ${asc ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`
@@ -180,8 +204,8 @@ export async function listEntities(db, p) {
   // al azar (Sorpréndeme): un punto cualquiera entre los ~400 más importantes que cumplen
   // los filtros, sin contar ni ordenar todo
   if (sort === 'random') {
-    let rows = await sortedRows(db, { where, params, key: 'rank', asc: false, limit, offset: Math.floor(Math.random() * 400), total: Infinity })
-    if (!rows.length) rows = await sortedRows(db, { where, params, key: 'rank', asc: false, limit, offset: 0, total: Infinity })
+    let rows = await sortedRows(db, p, { key: 'rank', asc: false, limit, offset: Math.floor(Math.random() * 400), total: Infinity })
+    if (!rows.length) rows = await sortedRows(db, p, { key: 'rank', asc: false, limit, offset: 0, total: Infinity })
     return { total: rows.length, offset: 0, limit, items: await withFacts(db, rows) }
   }
 
@@ -196,16 +220,18 @@ export async function listEntities(db, p) {
     rows = await db.all(`SELECT ${CARD_COLS} FROM entity e ${where} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`, [...params, limit, offset])
   } else {
     // sin total conocido se recorre el índice (lo normal en listas cortas y amplias)
-    rows = total === null || offset < total ? await sortedRows(db, { where, params, key: sort, asc, limit, offset, total: total ?? Infinity }) : []
+    rows = total === null || offset < total ? await sortedRows(db, p, { key: sort, asc, limit, offset, total: total ?? Infinity }) : []
     // los que no tienen el dato, al final por importancia (solo al llegar a esa parte)
     if (rows.length < limit && sort !== 'rank') {
       // cuántos tienen el dato: si caben en la primera página, son los que vinieron
       const nv = offset === 0 ? rows.length
         : (await db.first(`SELECT COUNT(*) AS n FROM entity e CROSS JOIN entity_sort s ON s.entity_id = e.id AND s.key = ? ${where}`, [sort, ...params]))?.n ?? 0
+      // recorre por importancia: filtros lugar por lugar
+      const c = filters(p, { correlated: true })
       const rest = await db.all(
-        `SELECT ${CARD_COLS} FROM entity e ${and} NOT EXISTS (SELECT 1 FROM entity_sort x WHERE x.key = ? AND x.entity_id = e.id)
+        `SELECT ${CARD_COLS} FROM entity e ${c.where ? `${c.where} AND` : 'WHERE'} NOT EXISTS (SELECT 1 FROM entity_sort x WHERE x.key = ? AND x.entity_id = e.id)
          ORDER BY e.rank DESC LIMIT ? OFFSET ?`,
-        [...params, sort, limit - rows.length, Math.max(0, offset - nv)],
+        [...c.params, sort, limit - rows.length, Math.max(0, offset - nv)],
       )
       rows = [...rows, ...rest]
     }
