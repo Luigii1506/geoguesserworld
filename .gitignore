@@ -16,3 +16,7 @@ public/community/
 
 # secretos de wrangler dev
 .dev.vars
+
+# pruebas de navegador
+test-results/
+playwright-report/

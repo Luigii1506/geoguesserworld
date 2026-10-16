@@ -1,10 +1,13 @@
-import { Suspense, useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import { savedItems, useStudy } from '../lib/study/store'
 import { dueCount } from '../lib/study/cards'
 import { setLang, useLang } from '../lib/i18n'
 import { useUser } from '../lib/auth'
 import { ICONS, MobileMenu, type MenuGroup } from './MobileMenu'
+import { GlobalSearch } from './GlobalSearch'
+import { Loading } from './ui'
+import { isIos, useInstall, useOnline } from '../lib/install'
 
 // Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
 const NAV = [
@@ -46,9 +49,40 @@ export default function Layout() {
     }
   }, [theme])
 
+  // al volver atrás (o adelante), la página vuelve a donde estabas; al ir a otra, arriba.
+  // Cambiar solo los filtros (?…) no mueve la página.
+  const navType = useNavigationType()
+  const positions = useRef(new Map<string, number>())
+  const lastPath = useRef(location.pathname)
+  // se cambia de escucha antes de pintar la página nueva: si no, el recorte del scroll al
+  // acortarse la página se guardaría como la posición de la anterior
+  useLayoutEffect(() => {
+    const key = location.key
+    const save = () => positions.current.set(key, window.scrollY)
+    window.addEventListener('scroll', save, { passive: true })
+    return () => window.removeEventListener('scroll', save)
+  }, [location.key])
   useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [location.pathname])
+    const samePage = lastPath.current === location.pathname
+    lastPath.current = location.pathname
+    const target = navType === 'POP' ? positions.current.get(location.key) : undefined
+    if (target === undefined) {
+      if (!samePage) window.scrollTo(0, 0)
+      return
+    }
+    // el contenido llega en partes: se reintenta hasta que la página es lo bastante alta (máx. ~2 s)
+    let frames = 0
+    let raf = 0
+    const restore = () => {
+      window.scrollTo(0, target)
+      if (Math.abs(window.scrollY - target) > 4 && ++frames < 120) raf = requestAnimationFrame(restore)
+    }
+    restore()
+    return () => cancelAnimationFrame(raf)
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const online = useOnline()
+  const install = useInstall()
 
   // la app instalada muestra en su icono cuántas tarjetas tocan (donde el sistema lo permite)
   useEffect(() => {
@@ -90,6 +124,17 @@ export default function Layout() {
       <button className="drawer-item" onClick={nextTheme}>
         <span className="drawer-icon" aria-hidden="true">◐</span><span>Tema: {THEME_LABEL[theme].toLowerCase()}</span>
       </button>
+      {install.mode === 'prompt' && (
+        <button className="drawer-item drawer-install" onClick={() => void install.install()}>
+          <span className="drawer-icon" aria-hidden="true">⤓</span><span>Instalar la app<small>Abre al instante y funciona sin conexión</small></span>
+        </button>
+      )}
+      {install.mode === 'ios' && isIos() && (
+        <div className="drawer-item drawer-install drawer-tip">
+          <span className="drawer-icon" aria-hidden="true">⤓</span>
+          <span>Instalar la app<small>En Safari: Compartir → «Añadir a pantalla de inicio»</small></span>
+        </div>
+      )}
       {user && (
         <button className="drawer-item drawer-out" onClick={signOut}>
           <span className="drawer-icon" aria-hidden="true">↩</span>
@@ -101,6 +146,7 @@ export default function Layout() {
 
   return (
     <>
+      <a href="#contenido" className="skip-link" onClick={(e) => (e.preventDefault(), document.getElementById('contenido')?.focus())}>Saltar al contenido</a>
       <header className="topbar">
         <div className="topbar-inner">
           <MobileMenu groups={groups} footer={drawerFoot} due={due} />
@@ -119,6 +165,7 @@ export default function Layout() {
             ))}
           </nav>
           <div className="topbar-tools">
+            <GlobalSearch />
             <div className="seg seg-sm" role="group" aria-label="Idioma de las pistas">
               <button className={lang === 'es' ? 'on' : ''} onClick={() => setLang('es')}>ES</button>
               <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
@@ -134,9 +181,10 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main className="page">
+      {!online && <div className="offline-bar" role="status">Sin conexión: ves lo que ya tenías guardado en este dispositivo. Tus repasos se enviarán al volver.</div>}
+      <main className="page" id="contenido" tabIndex={-1}>
         {/* cada página se descarga al visitarla (React.lazy en App.tsx) */}
-        <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
+        <Suspense fallback={<Loading what="la página" />}>
           <Outlet />
         </Suspense>
       </main>

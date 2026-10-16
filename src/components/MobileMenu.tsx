@@ -19,6 +19,36 @@ export function MobileMenu({ groups, footer, due }: { groups: MenuGroup[]; foote
   const [dragging, setDragging] = useState(false)
   const location = useLocation()
   const start = useRef<{ x: number; y: number; t: number; active: boolean } | null>(null)
+  const panel = useRef<HTMLElement>(null)
+  const drawer = useRef<HTMLDivElement>(null)
+  // cerrado, nada del panel recibe foco ni clics (React 18 no tiene la propiedad inert)
+  useEffect(() => {
+    drawer.current?.toggleAttribute('inert', !open)
+  }, [open])
+  const button = useRef<HTMLButtonElement>(null)
+
+  // foco: al abrir, al primer enlace (y el Tab no sale del panel); al cerrar, vuelve al botón
+  useEffect(() => {
+    if (!open) return
+    const el = panel.current
+    const focusables = () => [...(el?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [])]
+    focusables().find((x) => x.classList.contains('on'))?.focus() ?? focusables()[0]?.focus()
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last.focus())
+      else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first.focus())
+    }
+    window.addEventListener('keydown', trap)
+    const btn = button.current
+    return () => {
+      window.removeEventListener('keydown', trap)
+      btn?.focus({ preventScroll: true })
+    }
+  }, [open])
 
   // al cambiar de sección, se cierra
   useEffect(() => setOpen(false), [location.pathname, location.search])
@@ -94,14 +124,15 @@ export function MobileMenu({ groups, footer, due }: { groups: MenuGroup[]; foote
 
   return (
     <>
-      <button className="menu-btn" onClick={() => setOpen(true)} aria-label="Abrir el menú" aria-expanded={open}>
+      <button ref={button} className="menu-btn" onClick={() => setOpen(true)} aria-label="Abrir el menú" aria-expanded={open}>
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
         {due > 0 && <span className="menu-dot" aria-label={`${due} por repasar`} />}
       </button>
       {createPortal(
-        <div className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
+        <div ref={drawer} className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
           <div className="drawer-backdrop" onClick={() => setOpen(false)} style={dx ? { opacity: Math.max(0, 1 + dx / 300) } : undefined} />
           <nav
+            ref={panel}
             className="drawer-panel"
             aria-label="Secciones"
             style={dx ? { transform: `translateX(${dx}px)`, transition: dragging ? 'none' : undefined } : undefined}

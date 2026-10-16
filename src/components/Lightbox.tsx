@@ -68,6 +68,13 @@ export function Lightbox({ images, index, onClose, caption, captionOf }: {
     window.setTimeout(onClose, 180)
   }, [onClose])
 
+  // el foco entra en el visor (para el teclado y los lectores de pantalla) y vuelve al salir
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null
+    root.current?.querySelector<HTMLElement>('.lbx-btn')?.focus({ preventScroll: true })
+    return () => before?.focus?.({ preventScroll: true })
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()

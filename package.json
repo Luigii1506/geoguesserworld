@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "e2e": "playwright test",
     "pipeline": "node --disable-warning=ExperimentalWarning pipeline/run.mjs",
     "release": "npm run build && npm run pipeline -- geo publish"
   },
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.705.0",
+    "@playwright/test": "^1.63.0",
     "@types/d3-geo": "^3.1.0",
     "@types/d3-selection": "^3.0.11",
     "@types/d3-transition": "^3.0.9",

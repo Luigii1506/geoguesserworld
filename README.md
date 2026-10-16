@@ -268,7 +268,9 @@ y se sincroniza con tu cuenta en segundo plano (`POST /api/me/sync`, Neon,
 funciona sin conexión y en varios dispositivos; gana el cambio más reciente.
 
 `npm test` prueba la lógica del estudio (FSRS y su migración, sesiones, estadísticas, la mezcla
-entre dispositivos) y la validación del servidor.
+entre dispositivos) y la validación del servidor. `npm run e2e` (Playwright, en móvil y escritorio,
+sobre los datos locales) prueba la navegación, el buscador global, volver atrás, guardar y
+repasar, los gestos táctiles, el catálogo y que ninguna vista se desborde.
 
 ## Procedencia y licencias
 

@@ -71,8 +71,16 @@ export function DataError({ error, what = 'los datos' }: { error: string; what?:
   )
 }
 
+/** Mientras llega una vista: su silueta (título, líneas y tarjetas), en lugar de un texto. */
 export function Loading({ what = 'datos' }: { what?: string }) {
-  return <div className="empty">Cargando {what}…</div>
+  return (
+    <div className="skeleton-page" role="status" aria-live="polite" aria-label={`Cargando ${what}`}>
+      <span className="sk sk-title" />
+      <span className="sk sk-line" />
+      <span className="sk sk-line short" />
+      <div className="sk-grid">{Array.from({ length: 6 }, (_, i) => <span key={i} className="sk sk-card" />)}</div>
+    </div>
+  )
 }
 
 // el visor de fotos (con gestos) vive en su propio archivo

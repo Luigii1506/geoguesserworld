@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useDragToClose } from '../../lib/gestures'
 import { Link } from 'react-router-dom'
-import { createDeck, isSaved, liveDecks, saveItems, setItemDecks, setNote, setSettings, unsaveItem, useStudy, type NewItem } from '../../lib/study/store'
+import { createDeck, isSaved, liveDecks, saveItems, savedItems, setItemDecks, setNote, setSettings, unsaveItem, useStudy, type NewItem } from '../../lib/study/store'
 
 /**
  * ☆ Guardar para estudiar. Al guardar se abre un panel para elegir mazos y añadir una nota
@@ -97,6 +97,9 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
         <strong>★ En Guardados</strong>
         <Link to="/guardados" className="small">Ver mis guardados →</Link>
       </div>
+      {savedItems(s).length === 1 && (
+        <p className="save-first">Tu primer guardado. Lo tienes en <strong>Guardados</strong> (en el menú) y lo repasas en <strong>Entrenar</strong>, justo antes de que se te olvide.</p>
+      )}
       <span className="eyebrow">Mazos</span>
       <div className="save-decks">
         {decks.length === 0 && <p className="muted small">Sin mazos todavía: crea uno abajo, o déjalo suelto.</p>}
