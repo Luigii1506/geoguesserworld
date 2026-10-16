@@ -1,20 +1,18 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { countryFlag, countryLabel, loadJson, useCountryMap, type CountryRow } from '../../lib/data'
-import { buildSession, cardsOf, inScope, scopeCounts, SMART_DECKS, type CardSpec, type SessionScope } from '../../lib/study/cards'
-import { isNew, retrievability, untilText } from '../../lib/study/fsrs'
+import { buildSession, scopeCounts, SMART_DECKS, type CardSpec, type SessionScope } from '../../lib/study/cards'
+import { isNew, untilText } from '../../lib/study/fsrs'
 import { twinsItem } from '../../lib/study/items'
 import { accuracy, calendar, confusions, forecast, masteryByCountry, masteryByTopic, reviewsToday, speed, streak } from '../../lib/study/stats'
-import { deleteDeck, exportStudy, importStudy, isSaved, liveDecks, renameDeck, saveItems, savedItems, setItemDecks, setNote, setSettings, unsaveItem, useStudy } from '../../lib/study/store'
+import { exportStudy, importStudy, isSaved, saveItems, savedItems, setSettings, useStudy } from '../../lib/study/store'
 import { ExamHistory } from './ExamSession'
 import { lastSyncAt, syncNow, useSyncStatus } from '../../lib/study/sync'
-import type { HintData, PhotoData, PlaceData, StudyItem, TwinsData } from '../../lib/study/types'
-import { Img } from '../Img'
 
 const WorldMap = lazy(() => import('../WorldMap'))
 const StudySession = lazy(() => import('./StudySession'))
 
-// Mi estudio: lo que has guardado con ☆, repasado con FSRS. Arriba lo de hoy; debajo tus
+// Entrenar: tres formas de practicar (repasar lo guardado con ☆, práctica libre, examen); debajo tus
 // mazos, lo guardado, la previsión, el dominio por país y los países que confundes.
 
 const SIZES = [10, 20, 30, 50]
@@ -24,10 +22,18 @@ const tone = (x: number) => SCALE[Math.min(SCALE.length - 1, Math.floor(x * SCAL
 const pct = (x: number) => `${Math.round(x * 100)} %`
 const dayName = (iso: string, i: number) => (i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : new Date(`${iso}T12:00:00`).toLocaleDateString('es', { weekday: 'short' }))
 
-export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?: string; initialCountry?: string }) {
+export default function StudyHub({ initialDeck, initialCountry, initialItem, autostart }: {
+  initialDeck?: string
+  initialCountry?: string
+  initialItem?: string
+  /** empezar la sesión al entrar (desde Guardados: «Repasar este mazo», «Repasar solo esto») */
+  autostart?: boolean
+}) {
   const s = useStudy()
   const map = useCountryMap()
-  const [scope, setScope] = useState<SessionScope>(initialDeck ? { deck: initialDeck } : initialCountry ? { cc: initialCountry } : {})
+  const [scope, setScope] = useState<SessionScope>(
+    initialItem ? { item: initialItem } : initialDeck ? { deck: initialDeck } : initialCountry ? { cc: initialCountry } : {},
+  )
   const [size, setSize] = useState(20)
   const [session, setSession] = useState<CardSpec[] | null>(null)
   // cada sesión es nueva (su cola y sus resultados empiezan de cero)
@@ -35,7 +41,6 @@ export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?
 
   const counts = scopeCounts(s, scope)
   const items = savedItems(s)
-  const decks = liveDecks(s)
 
   const start = (sc: SessionScope = scope, extra = false) => {
     const cards = buildSession(s, sc, size, { extra })
@@ -46,6 +51,13 @@ export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?
       window.scrollTo(0, 0)
     }
   }
+  // desde Guardados: la sesión empieza sola (una vez)
+  const auto = useRef(autostart)
+  useEffect(() => {
+    if (!s.ready || !auto.current) return
+    auto.current = false
+    start(scope, true)
+  }, [s.ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!s.ready) return <div className="empty">Cargando tu estudio…</div>
   if (session) {
@@ -55,7 +67,6 @@ export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?
       </Suspense>
     )
   }
-  if (!items.length) return <Empty />
 
   const goal = s.settings.data.goal
   const today = reviewsToday(s)
@@ -63,86 +74,94 @@ export default function StudyHub({ initialDeck, initialCountry }: { initialDeck?
   const pending = counts.due + counts.newAvailable
   // las que tocan más tarde hoy (pasos cortos de FSRS tras aprender o fallar)
   const laterToday = Math.max(0, forecast(s, 1)[0].n - counts.due)
-  const scopeName = scope.smart ? SMART_DECKS.find((d) => d.id === scope.smart)?.name : scope.deck ? s.decks[scope.deck]?.name : scope.cc ? countryLabel(map, scope.cc) : 'Todo'
+  const scoped = scope.item || scope.deck || scope.cc || scope.smart
+  const scopeName = scope.item ? 'un guardado' : scope.smart ? SMART_DECKS.find((d) => d.id === scope.smart)?.name : scope.deck ? s.decks[scope.deck]?.name : scope.cc ? countryLabel(map, scope.cc) : ''
+  const status = !items.length
+    ? 'Aún no has guardado nada.'
+    : pending > 0
+      ? `${pending} ${pending === 1 ? 'tarjeta' : 'tarjetas'} para hoy${counts.due && counts.newAvailable ? ` (${counts.due} repasos, ${counts.newAvailable} nuevas)` : ''}`
+      : laterToday > 0
+        ? `Al día: ${laterToday} ${laterToday === 1 ? 'vuelve' : 'vuelven'} más tarde hoy.`
+        : 'Al día: nada pendiente hasta mañana.'
 
   return (
-    <div className="study-hub">
-      <section className="study-today">
-        <div className="study-today-main">
-          <span className="eyebrow">Hoy · {scopeName}</span>
-          <h2>{pending > 0 ? `${pending} ${pending === 1 ? 'tarjeta' : 'tarjetas'} para hoy` : 'Al día'}</h2>
-          <p className="muted">
-            {counts.due > 0 && <>{counts.due} toca repasar</>}
-            {counts.due > 0 && counts.newAvailable > 0 && ' · '}
-            {counts.newAvailable > 0 && <>{counts.newAvailable} nuevas</>}
-            {pending === 0 && (laterToday > 0
-              ? `${laterToday} ${laterToday === 1 ? 'vuelve' : 'vuelven'} más tarde hoy (lo recién aprendido se repasa a los pocos minutos).`
-              : counts.fresh > 0
-                ? `Ya empezaste las ${s.settings.data.newPerDay} nuevas de hoy. Quedan ${counts.fresh} para otros días.`
-                : 'Nada pendiente: vuelve mañana o adelanta repasos.')}
+    <div className="train-home">
+      <header className="page-head">
+        <h1>Entrenar</h1>
+        <p className="lead">Tres formas de practicar. Lo que respondes se guarda en tu progreso.</p>
+      </header>
+
+      <div className="train-choices">
+        <article className="train-choice train-choice-main">
+          <span className="train-choice-icon" aria-hidden="true">★</span>
+          <h2>Repasar lo guardado</h2>
+          <p>Lo que marcaste con ☆ en guías, fotos y lugares. Lo que fallas vuelve pronto; lo que dominas, cada vez más tarde.</p>
+          <p className="train-choice-stat">
+            {status}
+            {scoped && <> · solo <strong>{scopeName}</strong> <button className="link" onClick={() => setScope({})}>(ver todo)</button></>}
           </p>
-          <div className="row">
-            <button className="btn btn-primary btn-lg" onClick={() => start(scope, pending === 0)}>
-              {pending > 0 ? 'Estudiar ahora' : 'Adelantar repasos'}
-            </button>
-            <select className="select" value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Tarjetas por sesión">
-              {SIZES.map((n) => <option key={n} value={n}>{n} por sesión</option>)}
-            </select>
-            {(scope.deck || scope.cc || scope.smart) && <button className="btn btn-quiet" onClick={() => setScope({})}>Ver todo</button>}
-          </div>
-        </div>
-        <div className="study-kpis">
-          <div>
-            <strong>{today}<small>/{goal}</small></strong>
-            <span>repasos hoy</span>
-            <span className="kpi-bar"><span style={{ width: `${Math.min(100, (today / goal) * 100)}%` }} /></span>
-          </div>
+          {items.length > 0 ? (
+            <div className="row">
+              <button className="btn btn-primary btn-lg" onClick={() => start(scope, pending === 0)}>
+                {pending > 0 ? 'Repasar ahora' : 'Adelantar repasos'}
+              </button>
+              <select className="select" value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Tarjetas por sesión">
+                {SIZES.map((n) => <option key={n} value={n}>{n} tarjetas</option>)}
+              </select>
+              <Link to="/guardados" className="btn btn-quiet">Ver mis {items.length} guardados</Link>
+            </div>
+          ) : (
+            <div className="row">
+              <Link to="/guardados" className="btn btn-primary">Cómo guardar</Link>
+              <Link to="/paises" className="btn btn-quiet">Ir a un país</Link>
+            </div>
+          )}
+        </article>
+
+        <article className="train-choice">
+          <span className="train-choice-icon" aria-hidden="true">⟳</span>
+          <h2>Práctica libre</h2>
+          <p>Preguntas al azar de todas las guías: «¿de qué país es esta pista o esta foto?». No hace falta guardar nada.</p>
+          <div className="row"><Link to="/entrenar?modo=libre" className="btn">Empezar</Link></div>
+        </article>
+
+        <article className="train-choice">
+          <span className="train-choice-icon" aria-hidden="true">◷</span>
+          <h2>Examen de un país</h2>
+          <p>20 preguntas contra el reloj. No cambia tu repaso: sirve para medir cuánto has avanzado.</p>
+          <ExamStart />
+        </article>
+      </div>
+
+      {(items.length > 0 || s.reviews.length > 0) && (
+        <section className="train-today">
+          <div><strong>{today}<small>/{goal}</small></strong><span>repasos hoy</span><span className="kpi-bar"><span style={{ width: `${Math.min(100, (today / goal) * 100)}%` }} /></span></div>
           <div><strong>{days}</strong><span>{days === 1 ? 'día seguido' : 'días seguidos'}</span></div>
           <div><strong>{items.length}</strong><span>guardados</span></div>
-        </div>
-        <SyncLine />
-      </section>
+          <SyncLine />
+        </section>
+      )}
 
-      <Decks scope={scope} setScope={setScope} start={start} />
-      <Saved scope={scope} />
-
-      <div className="study-grid">
-        <Forecast />
-        <Accuracy />
-      </div>
-      <Activity />
-      <Mastery start={start} />
-      <Topics />
-      <Confusions />
-      <Exams />
-      <SettingsPanel />
-      <p className="muted small" style={{ marginTop: '2rem' }}>
-        <Link to="/entrenar?modo=libre">Práctica libre</Link>: preguntas al azar de todas las guías, sin guardar nada.
-        {decks.length === 0 && ' Crea mazos desde ☆ Guardar para separar lo que estudias.'}
-      </p>
-    </div>
-  )
-}
-
-function Empty() {
-  return (
-    <div className="study-empty">
-      <h2>Guarda lo que quieras aprender</h2>
-      <p>
-        Toca <strong>☆ Guardar</strong> en una pista, una foto o un lugar, o <strong>Estudiar lo esencial</strong> en la guía de un país.
-        Aquí lo repasarás con repetición espaciada: lo que fallas vuelve pronto; lo que dominas, cada vez más tarde.
-      </p>
-      <ul>
-        <li><strong>Reconocer:</strong> ves la pista o la foto y eliges el país, con los países con los que se confunde.</li>
-        <li><strong>Recordar:</strong> «Hungría · bolardos: ¿cómo son?», lo piensas y lo compruebas.</li>
-        <li><strong>Ubicar:</strong> «¿Dónde está el lago Balatón?», tocas el mapa y cuenta la distancia.</li>
-      </ul>
-      <div className="row">
-        <Link to="/paises" className="btn btn-primary">Elegir un país</Link>
-        <Link to="/explorar" className="btn">Explorar fotos</Link>
-        <Link to="/geografia" className="btn">Lugares</Link>
-        <Link to="/entrenar?modo=libre" className="btn btn-quiet">Práctica libre</Link>
-      </div>
+      {s.reviews.length > 0 && (
+        <details className="train-more">
+          <summary>Tu progreso <span className="muted small">previsión, actividad, dominio por país, confusiones</span></summary>
+          <div className="study-hub">
+            <div className="study-grid">
+              <Forecast />
+              <Accuracy />
+            </div>
+            <Activity />
+            <Mastery start={start} />
+            <Topics />
+            <Confusions />
+            <Exams />
+          </div>
+        </details>
+      )}
+      <details className="train-more">
+        <summary>Ajustes <span className="muted small">objetivo diario, nuevas al día, copia de seguridad</span></summary>
+        <SettingsPanel />
+      </details>
     </div>
   )
 }
@@ -165,214 +184,9 @@ function SyncLine() {
   )
 }
 
-function Decks({ scope, setScope, start }: { scope: SessionScope; setScope: (s: SessionScope) => void; start: (s: SessionScope) => void }) {
-  const s = useStudy()
-  const map = useCountryMap()
-  const decks = liveDecks(s)
-  const items = savedItems(s)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const byCountry = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const i of items) if (i.cc) m.set(i.cc, (m.get(i.cc) ?? 0) + 1)
-    return [...m].sort((a, b) => b[1] - a[1])
-  }, [items])
 
-  const mastery = (sc: SessionScope) => {
-    let sum = 0
-    let n = 0
-    for (const it of items) {
-      if (!inScope(it, sc, s)) continue
-      for (const c of cardsOf(it)) {
-        const st = s.cards[c.key]?.state
-        n++
-        if (!isNew(st)) sum += retrievability(st)
-      }
-    }
-    return n ? sum / n : 0
-  }
-  // mazos automáticos (solo los que tienen algo) y los tuyos
-  const smart = SMART_DECKS.map((d) => ({ sc: { smart: d.id } as SessionScope, name: d.name, hint: d.hint })).filter((r) => scopeCounts(s, r.sc).items > 0)
-  const rows: { sc: SessionScope; name: string; id?: string; hint?: string }[] = [
-    { sc: {}, name: 'Todo lo guardado' },
-    ...smart,
-    ...decks.map((d) => ({ sc: { deck: d.id }, name: d.name, id: d.id })),
-  ]
 
-  return (
-    <section className="filter-group study-section">
-      <h2>Mazos</h2>
-      <ul className="deck-list">
-        {rows.map(({ sc, name, id, hint }) => {
-          const c = scopeCounts(s, sc)
-          const m = mastery(sc)
-          const active = (scope.deck ?? '') === (sc.deck ?? '') && (scope.smart ?? '') === (sc.smart ?? '') && !scope.cc
-          return (
-            <li key={id ?? sc.smart ?? 'all'} className={`${active ? 'on' : ''} ${sc.smart ? 'smart' : ''}`} title={hint}>
-              <button className="deck-main" onClick={() => setScope(sc)}>
-                {editing === id && id ? (
-                  <input
-                    className="input"
-                    autoFocus
-                    value={draft}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onBlur={() => (renameDeck(id, draft), setEditing(null))}
-                    onKeyDown={(e) => e.key === 'Enter' && (renameDeck(id, draft), setEditing(null))}
-                  />
-                ) : (
-                  <strong>{name}</strong>
-                )}
-                <span className="muted small">
-                  {sc.smart && <span className="deck-auto">automático · </span>}
-                  {c.items} {c.items === 1 ? 'guardado' : 'guardados'} · {c.due} por repasar{!sc.smart || sc.smart !== 'weak' ? ` · ${c.newAvailable} ${c.newAvailable === 1 ? 'nueva' : 'nuevas'}` : ''}
-                </span>
-                <span className="deck-bar" title={`Dominio ${pct(m)}`}><span style={{ width: `${m * 100}%`, background: tone(m) }} /></span>
-              </button>
-              <div className="deck-actions">
-                <button className="btn" disabled={c.due + c.newAvailable === 0} onClick={() => start(sc)}>Estudiar</button>
-                {id && (
-                  <>
-                    <button className="btn btn-quiet" onClick={() => (setEditing(id), setDraft(name))} aria-label={`Renombrar ${name}`}>Renombrar</button>
-                    <button className="btn btn-quiet" onClick={() => confirm(`¿Borrar el mazo «${name}»? Lo guardado se queda en Mi estudio.`) && deleteDeck(id)} aria-label={`Borrar ${name}`}>Borrar</button>
-                  </>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-      {byCountry.length > 1 && (
-        <>
-          <span className="eyebrow">Por país</span>
-          <div className="chips">
-            {byCountry.map(([cc, n]) => (
-              <button key={cc} className={`chip ${scope.cc === cc ? 'on' : ''}`} onClick={() => setScope({ cc })}>
-                {countryFlag(map, cc)} {countryLabel(map, cc)} <span className="muted">{n}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
-  )
-}
 
-function itemTitle(i: StudyItem): string {
-  if (i.kind === 'twins') return `${(i.data as TwinsData).a.toUpperCase()} ↔ ${(i.data as TwinsData).b.toUpperCase()}`
-  if (i.kind === 'place') return (i.data as PlaceData).name
-  if (i.kind === 'photo') return (i.data as PhotoData).catName ?? (i.data as PhotoData).cat
-  return (i.data as HintData).text
-}
-
-function Saved({ scope }: { scope: SessionScope }) {
-  const s = useStudy()
-  const map = useCountryMap()
-  const [open, setOpen] = useState(false)
-  const [q, setQ] = useState('')
-  const [sel, setSel] = useState<Set<string>>(new Set())
-  const decks = liveDecks(s)
-  const toggle = (k: string) => setSel((x) => {
-    const y = new Set(x)
-    if (y.has(k)) y.delete(k)
-    else y.add(k)
-    return y
-  })
-  const moveTo = (deck: string) => {
-    for (const k of sel) {
-      const it = s.items[k]
-      if (it) setItemDecks(k, deck === '' ? [] : [...it.decks.filter((d) => d !== scope.deck), deck])
-    }
-    setSel(new Set())
-  }
-  const removeSel = () => {
-    if (!confirm(`¿Quitar ${sel.size} de Mi estudio?`)) return
-    for (const k of sel) unsaveItem(k)
-    setSel(new Set())
-  }
-  const list = savedItems(s)
-    .filter((i) => inScope(i, scope, s))
-    .filter((i) => !q || itemTitle(i).toLowerCase().includes(q.toLowerCase()) || i.note.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => b.created_at - a.created_at)
-  return (
-    <section className="filter-group study-section">
-      <div className="row">
-        <h2>Guardados</h2>
-        <button className="link" onClick={() => setOpen(!open)}>{open ? 'Ocultar' : `Ver ${list.length}`}</button>
-      </div>
-      {open && (
-        <>
-          <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en lo guardado y tus notas" style={{ marginBottom: '0.8rem' }} />
-          <div className="saved-tools">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={sel.size > 0 && list.slice(0, 200).every((i) => sel.has(i.key))}
-                onChange={(e) => setSel(e.target.checked ? new Set(list.slice(0, 200).map((i) => i.key)) : new Set())}
-              /> {sel.size ? `${sel.size} elegidos` : 'Elegir todos'}
-            </label>
-            {sel.size > 0 && (
-              <>
-                <select className="select" value="" onChange={(e) => e.target.value !== '-' && moveTo(e.target.value)} aria-label="Mover a un mazo">
-                  <option value="-">Mover a…</option>
-                  {decks.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  <option value="">Sin mazo</option>
-                </select>
-                <button className="btn btn-quiet" onClick={removeSel}>Quitar</button>
-              </>
-            )}
-          </div>
-          <ul className="saved-list">
-            {list.slice(0, 200).map((i) => {
-              const img = i.kind === 'photo' ? (i.data as PhotoData).img : i.kind === 'place' ? (i.data as PlaceData).thumb : (i.data as HintData).img
-              const r = Math.max(...cardsOf(i).map((c) => retrievability(s.cards[c.key]?.state)))
-              return (
-                <li key={i.key} className={sel.has(i.key) ? 'on' : ''}>
-                  <input type="checkbox" className="saved-check" checked={sel.has(i.key)} onChange={() => toggle(i.key)} aria-label="Elegir" />
-                  <span className="saved-img">{img ? <Img src={img} sizes="56px" /> : <span>{i.kind === 'place' ? '◎' : i.kind === 'twins' ? '⇄' : '¶'}</span>}</span>
-                  <span className="saved-main">
-                    <span className="saved-title">{itemTitle(i)}</span>
-                    <span className="muted small">
-                      {i.cc && <>{countryFlag(map, i.cc)} {countryLabel(map, i.cc)} · </>}
-                      {i.kind === 'hint' ? (i.data as HintData).catName ?? 'Pista' : i.kind === 'photo' ? 'Foto' : i.kind === 'twins' ? 'Gemelos' : (i.data as PlaceData).kindLabel ?? 'Lugar'}
-                      {i.decks.length > 0 && <> · {i.decks.map((d) => s.decks[d]?.name).filter(Boolean).join(', ')}</>}
-                      {r > 0 && <> · dominio {pct(r)}</>}
-                    </span>
-                    <NoteEdit item={i} />
-                  </span>
-                  <button className="btn btn-quiet" onClick={() => unsaveItem(i.key)} aria-label="Quitar">Quitar</button>
-                </li>
-              )
-            })}
-          </ul>
-          {list.length > 200 && <p className="muted small">Se muestran 200 de {list.length}. Usa la búsqueda para encontrar el resto.</p>}
-        </>
-      )}
-    </section>
-  )
-}
-
-function NoteEdit({ item }: { item: StudyItem }) {
-  const [edit, setEdit] = useState(false)
-  const [draft, setDraft] = useState(item.note)
-  if (!edit) {
-    return (
-      <button className="link saved-note" onClick={() => (setDraft(item.note), setEdit(true))}>
-        {item.note ? `“${item.note}”` : '+ nota'}
-      </button>
-    )
-  }
-  return (
-    <textarea
-      className="input"
-      rows={2}
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => (draft !== item.note && setNote(item.key, draft), setEdit(false))}
-    />
-  )
-}
 
 function Forecast() {
   const s = useStudy()
@@ -563,45 +377,51 @@ function Topics() {
   )
 }
 
-function Exams() {
+/** El selector del examen en la tarjeta de Entrenar (el país más estudiado, por defecto). */
+function ExamStart() {
   const s = useStudy()
   const map = useCountryMap()
   const navigate = useNavigate()
-  const exams = s.settings.data.exams ?? []
   const options = useMemo(() => [...map.values()].filter((c) => c.groups > 0).sort((a, b) => (a.name_es ?? a.name).localeCompare(b.name_es ?? b.name, 'es')), [map])
-  // por defecto, el país más estudiado
   const studied = useMemo(() => {
     const m = new Map<string, number>()
     for (const i of savedItems(s)) if (i.cc) m.set(i.cc, (m.get(i.cc) ?? 0) + 1)
     return [...m].sort((a, b) => b[1] - a[1]).map(([cc]) => cc)
   }, [s.items]) // eslint-disable-line react-hooks/exhaustive-deps
   const [cc, setCc] = useState('')
-  const pick = cc || studied[0] || ''
-  const recent = [...new Set(exams.slice().reverse().map((e) => e.cc))].slice(0, 6)
+  const pick = cc || studied[0] || 'hu'
+  return (
+    <div className="row">
+      <select className="select" value={pick} onChange={(e) => setCc(e.target.value)} aria-label="País del examen">
+        {options.map((c) => <option key={c.code} value={c.code}>{c.flag} {c.name_es ?? c.name}</option>)}
+      </select>
+      <button className="btn" onClick={() => navigate(`/entrenar?examen=${pick}`)}>Empezar</button>
+    </div>
+  )
+}
+
+/** Historial de exámenes por país (en «Tu progreso»). */
+function Exams() {
+  const s = useStudy()
+  const map = useCountryMap()
+  const exams = s.settings.data.exams ?? []
+  const recent = [...new Set(exams.slice().reverse().map((e) => e.cc))].slice(0, 8)
+  if (!recent.length) return null
   return (
     <section className="filter-group study-section">
-      <h2>Examen</h2>
-      <p className="muted small">20 preguntas al azar de un país, contra el reloj. No cambia tu repaso: sirve para ver cuánto has avanzado.</p>
-      <div className="row">
-        <select className="select" value={pick} onChange={(e) => setCc(e.target.value)} aria-label="País del examen">
-          {options.map((c) => <option key={c.code} value={c.code}>{c.flag} {c.name_es ?? c.name}</option>)}
-        </select>
-        <button className="btn btn-primary" disabled={!pick} onClick={() => navigate(`/entrenar?examen=${pick}`)}>Empezar examen</button>
+      <h2>Exámenes</h2>
+      <div className="exam-recent">
+        {recent.map((x) => {
+          const last = exams.filter((e) => e.cc === x).at(-1)!
+          return (
+            <div key={x} className="exam-row">
+              <span>{countryFlag(map, x)} {countryLabel(map, x)}</span>
+              <ExamHistory cc={x} />
+              <span className="muted small">última: {last.ok}/{last.n}</span>
+            </div>
+          )
+        })}
       </div>
-      {recent.length > 0 && (
-        <div className="exam-recent">
-          {recent.map((x) => {
-            const last = exams.filter((e) => e.cc === x).at(-1)!
-            return (
-              <div key={x} className="exam-row">
-                <span>{countryFlag(map, x)} {countryLabel(map, x)}</span>
-                <ExamHistory cc={x} />
-                <span className="muted small">última: {last.ok}/{last.n}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
     </section>
   )
 }
@@ -646,7 +466,7 @@ function SettingsPanel() {
           hidden
           onChange={async (e) => {
             const f = e.target.files?.[0]
-            if (f) setMsg(importStudy(await f.text()) ? 'Copia importada.' : 'Ese archivo no es una copia de Mi estudio.')
+            if (f) setMsg(importStudy(await f.text()) ? 'Copia importada.' : 'Ese archivo no es una copia de GeoMastery.')
             e.target.value = ''
           }}
         />

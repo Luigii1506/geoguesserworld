@@ -47,6 +47,8 @@ export interface SessionScope {
   deck?: string
   cc?: string
   smart?: SmartDeck
+  /** un solo guardado («Repasar solo esto») */
+  item?: string
 }
 
 /** ¿Una tarjeta es de las que más cuestan? (falladas 2+ veces o con menos de un 70 % de recuerdo) */
@@ -57,6 +59,7 @@ function weakCard(s: StudyState, key: string): boolean {
 }
 
 export function inScope(item: StudyItem, scope: SessionScope, s?: StudyState): boolean {
+  if (scope.item && item.key !== scope.item) return false
   if (scope.deck && !item.decks.includes(scope.deck)) return false
   if (scope.cc && item.cc !== scope.cc && !(item.kind === 'twins' && [(item.data as { a: string }).a, (item.data as { b: string }).b].includes(scope.cc))) return false
   if (scope.smart === 'essential') return item.kind === 'hint' && (item.data as HintData).u === 3
@@ -126,13 +129,15 @@ export function buildSession(s: StudyState, scope: SessionScope, size: number, o
   const out: CardSpec[] = []
   const usedItems = new Set<string>()
   const take = (spec: CardSpec) => {
-    if (out.length >= size || usedItems.has(spec.item.key)) return
+    // una tarjeta por guardado y sesión (salvo si se repasa ese guardado solo)
+    if (out.length >= size || (!scope.item && usedItems.has(spec.item.key))) return
     usedItems.add(spec.item.key)
     out.push(spec)
   }
   due.sort((a, b) => a.at - b.at).forEach((d) => take(d.spec))
-  // nuevas: primero reconocer (lo más útil en partida), países alternados
-  const newLeft = Math.max(0, s.settings.data.newPerDay - newToday(s, now))
+  // nuevas: primero reconocer (lo más útil en partida), países alternados; repasando un solo
+  // guardado, todas sus tarjetas (el límite del día es para no saturarse con lo nuevo)
+  const newLeft = scope.item ? Infinity : Math.max(0, s.settings.data.newPerDay - newToday(s, now))
   const order = { choice: 0, twins: 1, locate: 2, streetview: 3, recall: 4 }
   const byCountry = new Map<string, CardSpec[]>()
   for (const spec of shuffle(fresh).sort((a, b) => order[a.type] - order[b.type])) {

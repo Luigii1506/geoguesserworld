@@ -204,7 +204,7 @@ function Today({ s, due }: { s: StudyState; due: number }) {
         </p>
       </div>
       <div className="row">
-        <Link to="/entrenar" className="btn btn-primary btn-lg">{pending > 0 ? 'Repasar ahora' : 'Mi estudio'}</Link>
+        <Link to="/entrenar" className="btn btn-primary btn-lg">{pending > 0 ? 'Repasar ahora' : 'Entrenar'}</Link>
         {next && <Link to={`/pais/${next}`} className="btn btn-lg">Guía de {countryLabel(map, next)}</Link>}
       </div>
     </section>

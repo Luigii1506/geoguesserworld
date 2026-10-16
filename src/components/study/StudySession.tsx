@@ -14,7 +14,7 @@ import { SaveButton } from './SaveButton'
 
 const LocateMap = lazy(() => import('./LocateMap'))
 
-// Una sesión de Mi estudio. Lo que se falla vuelve una vez al final de la sesión (además de
+// Una sesión de repaso de lo guardado. Lo que se falla vuelve una vez al final de la sesión (además de
 // mañana, como programe FSRS): así se cierra el día habiéndolo acertado.
 
 const GRADE_LABEL: Record<Grade, string> = { 1: 'Otra vez', 2: 'Difícil', 3: 'Bien', 4: 'Fácil' }
@@ -449,7 +449,7 @@ function Summary({ results, onExit, onAgain }: { results: SessionResult[]; onExi
       )}
       <div className="row">
         <button className="btn btn-primary btn-lg" onClick={onAgain}>Otra sesión</button>
-        <button className="btn btn-lg" onClick={onExit}>Volver a Mi estudio</button>
+        <button className="btn btn-lg" onClick={onExit}>Volver a Entrenar</button>
       </div>
     </div>
   )

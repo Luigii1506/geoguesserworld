@@ -233,7 +233,7 @@ export default function Duel() {
         )}
         <div className="dd-save">
           <SaveButton item={twinsItem(A.code, B.code, duel.headline)} />
-          <span className="muted small">Guárdalo y repásalo foto contra foto en Mi estudio.</span>
+          <span className="muted small">Guárdalo y repásalo foto contra foto desde Guardados.</span>
         </div>
         <ol className="dd-plan">
           <li><button onClick={() => jump('diferencias')}><span>1</span>Mira las {diffs.length} diferencias</button></li>

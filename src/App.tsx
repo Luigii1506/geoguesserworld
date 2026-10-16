@@ -14,6 +14,7 @@ const Geography = lazy(() => import('./pages/Geography'))
 const Duel = lazy(() => import('./pages/Duel'))
 const Visual = lazy(() => import('./pages/Visual'))
 const Catalog = lazy(() => import('./pages/Catalog'))
+const Saved = lazy(() => import('./pages/Saved'))
 const Train = lazy(() => import('./pages/Train'))
 const Sources = lazy(() => import('./pages/Sources'))
 
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/comparar" element={<CompareRedirect />} />
           <Route path="/explorar" element={<Visual />} />
           <Route path="/catalogo" element={<Catalog />} />
+          <Route path="/guardados" element={<Saved />} />
           <Route path="/entrenar" element={<Train />} />
           <Route path="/fuentes" element={<Sources />} />
           {/* rutas de la versión anterior */}

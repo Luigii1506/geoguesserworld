@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useStudy } from '../lib/study/store'
+import { savedItems, useStudy } from '../lib/study/store'
 import { dueCount } from '../lib/study/cards'
 import { setLang, useLang } from '../lib/i18n'
 import { useUser } from '../lib/auth'
@@ -14,6 +14,7 @@ const NAV = [
   { to: '/geografia', label: 'Geografía' },
   { to: '/buscar', label: 'Buscar' },
   { to: '/duelo', label: 'Duelos' },
+  { to: '/guardados', label: 'Guardados' },
   { to: '/entrenar', label: 'Entrenar' },
 ]
 
@@ -26,6 +27,7 @@ export default function Layout() {
   const lang = useLang()
   const location = useLocation()
   const due = dueCount(study)
+  const saved = savedItems(study).length
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       return (localStorage.getItem('geomastery.theme') as Theme) || 'auto'
@@ -65,6 +67,7 @@ export default function Layout() {
         { to: '/paises', label: 'Países', icon: ICONS.countries, match: (p) => p.startsWith('/pais/') },
         { to: '/catalogo', label: 'Catálogo', icon: ICONS.catalog },
         { to: '/duelo', label: 'Duelos', icon: ICONS.duel },
+        { to: '/guardados', label: 'Guardados', icon: ICONS.saved, count: saved },
         { to: '/entrenar', label: 'Entrenar', icon: ICONS.train, count: due },
       ],
     },

@@ -6,7 +6,7 @@ import { guides, type QuizRequest } from '../lib/guides'
 import { useLang } from '../lib/i18n'
 import { REGION_ES } from '../lib/labels'
 import { LANDMARKS, type Landmark } from '../data/landmarks'
-import { reviewCard, savedItems, useStudy } from '../lib/study/store'
+import { reviewCard, useStudy } from '../lib/study/store'
 import { isDue, isNew } from '../lib/study/fsrs'
 import { maskText, pickDistractors, shuffle } from '../lib/study/quiz'
 import type { Grade } from '../lib/study/types'
@@ -19,7 +19,7 @@ const StudyHub = lazy(() => import('../components/study/StudyHub'))
 const ExamSession = lazy(() => import('../components/study/ExamSession'))
 
 // Entrenar tiene dos partes:
-//   · Mi estudio: lo que has guardado con ☆, en tus mazos (components/study/StudyHub.tsx)
+//   · la portada: repasar lo guardado con ☆, práctica libre o examen (components/study/StudyHub.tsx)
 //   · Práctica libre: "¿de qué país es esto?" con preguntas de todas las guías, con
 //     distractores que se le parecen de verdad (los países con los que se confunde y, en
 //     fotos, solo países que tienen ese mismo objeto). Las elige la API (/api/gg/quiz) con
@@ -47,10 +47,8 @@ const GRADES: { g: Grade; label: string }[] = [
 
 export default function Train() {
   const [params, setParams] = useSearchParams()
-  const s = useStudy()
-  // con algo guardado se abre Mi estudio; ?pais= (desde una guía) y ?modo=libre, la práctica libre
-  const free = params.get('modo') === 'libre' || params.has('pais') || (s.ready && savedItems(s).length === 0 && !params.has('mazo'))
-  const go = (libre: boolean) => setParams(libre ? { modo: 'libre' } : {}, { replace: true })
+  // ?modo=libre (o ?pais=, desde una guía): práctica libre · ?examen=: examen · si no, la portada
+  const free = params.get('modo') === 'libre' || params.has('pais')
   const exam = params.get('examen')
   if (exam) {
     return (
@@ -59,20 +57,25 @@ export default function Train() {
       </Suspense>
     )
   }
-  return (
-    <div>
-      <div className="train-tabs seg" role="tablist" aria-label="Entrenar">
-        <button role="tab" aria-selected={!free} className={!free ? 'on' : ''} onClick={() => go(false)}>Mi estudio</button>
-        <button role="tab" aria-selected={free} className={free ? 'on' : ''} onClick={() => go(true)}>Práctica libre</button>
-      </div>
-      {free ? (
+  if (free) {
+    return (
+      <div>
+        <Link to="/entrenar" className="back-link">← Entrenar</Link>
         <Practice />
-      ) : (
-        <Suspense fallback={<div className="empty">Cargando tu estudio…</div>}>
-          <StudyHub initialDeck={params.get('mazo') ?? undefined} initialCountry={params.get('estudiar') ?? undefined} />
-        </Suspense>
-      )}
-    </div>
+      </div>
+    )
+  }
+  return (
+    <Suspense fallback={<div className="empty">Cargando tu estudio…</div>}>
+      <StudyHub
+        // otra URL (Entrenar desde el menú, «Repasar solo esto»…): empieza de cero
+        key={params.toString()}
+        initialDeck={params.get('mazo') ?? undefined}
+        initialCountry={params.get('estudiar') ?? undefined}
+        initialItem={params.get('item') ?? undefined}
+        autostart={params.get('empezar') === '1'}
+      />
+    </Suspense>
   )
 }
 
@@ -321,10 +324,10 @@ function Practice() {
   return (
     <div className="page-narrow">
       <header className="page-head">
-        <h1>Entrenar</h1>
+        <h1>Práctica libre</h1>
         <p className="lead">
-          Preguntas sacadas de las pistas reales, con países que se confunden de verdad. Lo que fallas vuelve pronto; lo que
-          dominas, cada vez más tarde.
+          Preguntas al azar sacadas de las pistas reales, con países que se confunden de verdad. Lo que fallas vuelve pronto;
+          lo que dominas, cada vez más tarde.
         </p>
       </header>
 

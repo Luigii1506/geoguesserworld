@@ -156,5 +156,6 @@ export const ICONS = {
   maps: svg('M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14'),
   search: svg('M11 11m-6 0a6 6 0 1 0 12 0a6 6 0 1 0 -12 0M20 20l-4.5-4.5'),
   photos: svg('M4 6h16v12H4zM4 15l4-4 4 4 3-3 5 5M15 9h.01'),
+  saved: svg('M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.4 7.2 18.9l.9-5.4L4.2 9.7l5.4-.8z'),
   sources: svg('M6 4h9l3 3v13H6zM9 10h6M9 14h6M9 18h4'),
 }

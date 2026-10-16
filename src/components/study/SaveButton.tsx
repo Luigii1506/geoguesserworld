@@ -6,7 +6,7 @@ import { createDeck, isSaved, liveDecks, saveItems, setItemDecks, setNote, setSe
 
 /**
  * ☆ Guardar para estudiar. Al guardar se abre un panel para elegir mazos y añadir una nota
- * ("se confunde con el de Eslovaquia"); lo guardado sale en Entrenar → Mi estudio.
+ * ("se confunde con el de Eslovaquia"); lo guardado sale en Guardados y se repasa en Entrenar.
  */
 export function SaveButton({ item, compact = false }: { item: NewItem; compact?: boolean }) {
   const s = useStudy()
@@ -29,7 +29,7 @@ export function SaveButton({ item, compact = false }: { item: NewItem; compact?:
         className={`save-btn ${saved ? 'on' : ''} ${compact ? 'compact' : ''}`}
         onClick={click}
         aria-pressed={saved}
-        title={saved ? 'Guardado en Mi estudio' : 'Guardar para estudiar'}
+        title={saved ? 'En Guardados' : 'Guardar para repasarlo'}
       >
         <span aria-hidden="true">{saved ? '★' : '☆'}</span>
         {!compact && <span>{saved ? 'Guardado' : 'Guardar'}</span>}
@@ -92,10 +92,10 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
   const saveNote = () => draft !== item.note && setNote(itemKey, draft)
 
   return createPortal(
-    <div className="save-panel" ref={ref} role="dialog" aria-label="Guardado en Mi estudio" style={{ ...place(anchor), ...drag.style }} onClick={(e) => e.stopPropagation()}>
+    <div className="save-panel" ref={ref} role="dialog" aria-label="En Guardados" style={{ ...place(anchor), ...drag.style }} onClick={(e) => e.stopPropagation()}>
       <div className="save-panel-head" {...drag.handle}>
-        <strong>★ En Mi estudio</strong>
-        <Link to="/entrenar" className="small">Ir a estudiar →</Link>
+        <strong>★ En Guardados</strong>
+        <Link to="/guardados" className="small">Ver mis guardados →</Link>
       </div>
       <span className="eyebrow">Mazos</span>
       <div className="save-decks">
@@ -115,7 +115,7 @@ function SavePanel({ itemKey, anchor, onClose }: { itemKey: string; anchor: DOMR
         <textarea className="input" rows={2} value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={saveNote} placeholder="Lo que quieres recordar de esto" />
       </label>
       <div className="save-panel-foot">
-        <button className="link danger" onClick={() => (unsaveItem(itemKey), onClose())}>Quitar de Mi estudio</button>
+        <button className="link danger" onClick={() => (unsaveItem(itemKey), onClose())}>Quitar de Guardados</button>
         <button className="btn btn-primary" onClick={() => (saveNote(), onClose())}>Listo</button>
       </div>
     </div>,

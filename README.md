@@ -230,11 +230,14 @@ npm run release                             # build + D1 + R2 + Worker
 
 Para invitar a alguien: añade su correo a `ALLOWED_EMAILS` y `npm run pipeline -- geo publish secrets`.
 
-## Mi estudio y repetición espaciada
+## Guardados, Entrenar y repetición espaciada
 
 Con ☆ Guardar (en cada pista, foto del explorador y lugar de Geografía) o **Estudiar lo
 esencial** / **Estudiar este tema** en la guía de un país, lo que quieras aprender va a
-**Entrenar → Mi estudio**, organizado en mazos propios y con notas. Cada guardado da varias
+**Guardados** (`/#/guardados`): tarjetas con su foto y su texto, filtros por tipo, país y mazo,
+búsqueda en tus notas y una ficha con todo y «Repasar solo esto». **Entrenar** ofrece tres
+formas de practicar: repasar lo guardado (repetición espaciada), práctica libre (preguntas al
+azar de todas las guías) y el examen de un país. Cada guardado da varias
 tarjetas ([src/lib/study/cards.ts](src/lib/study/cards.ts)):
 
 - **reconocer**: la pista, la foto o el lugar → ¿de qué país es? (distractores con los países
