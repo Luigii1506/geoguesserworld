@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
-import { countryFlag, countryLabel, useCountryMap, useMetaObjects, type CountryRow, type MetaObject } from '../lib/data'
+import { countryFlag, countryLabel, useCountryFile, useCountryMap, useMetaObjects, type CountryRow, type MetaObject } from '../lib/data'
 import { COLOR_HEX, OBJECT_CATEGORY, OBJECT_LABEL, REGION_ES, VARIANT_LABEL, attrLabel, valueLabel } from '../lib/labels'
 import { Img } from '../components/Img'
-import { DataError, Loading, ObjectCard, Swatch } from '../components/ui'
+import { CountryChip, DataError, HintText, Loading, Swatch } from '../components/ui'
+import { hintText, useLang } from '../lib/i18n'
 import { SaveButton } from '../components/study/SaveButton'
 import { itemKey, type NewItem } from '../lib/study/store'
 
@@ -219,10 +220,15 @@ function CountryTile({ e, picked, onOpen }: { e: Entry; picked: Map<string, stri
   )
 }
 
-/** Todas las versiones de un país (principal, regionales, especiales, antiguas), con sus relaciones. */
+/**
+ * Todas las versiones de un país (principal, regionales, especiales, antiguas): la foto y lo que
+ * dicen sus pistas (de la guía del país), con qué se confunde y quién comparte el diseño.
+ */
 function CountryDetail({ e, type, onClose }: { e: Entry; type: string; onClose: () => void }) {
   const map = useCountryMap()
-  const file = useMetaObjects()
+  const lang = useLang()
+  const file = useCountryFile(e.cc)
+  const hints = useMemo(() => new Map((file?.hints ?? []).map((h) => [h.id, h])), [file])
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => ev.key === 'Escape' && onClose()
     const prev = document.body.style.overflow
@@ -233,9 +239,20 @@ function CountryDetail({ e, type, onClose }: { e: Entry; type: string; onClose: 
       document.body.style.overflow = prev
     }
   }, [onClose])
-  // cuántos países tienen cada rasgo (para marcar los poco comunes)
-  const traitCount = (t: string, k: string, v: string) => file?.traits.find((x) => x.type === t && x.key === k && x.value === v)?.n
   const twins = [...new Set(e.all.flatMap((o) => o.confusedWith.map((c) => c.country)))]
+  /** Los textos de las pistas de una versión, sin repetir (varias fuentes dicen lo mismo). */
+  const textsOf = (o: MetaObject) => {
+    const seen = new Set<string>()
+    return o.hints
+      .map((id) => hints.get(id))
+      .filter((h): h is NonNullable<typeof h> => Boolean(h))
+      .map((h) => hintText(h, lang).trim())
+      .filter((t) => {
+        const sig = t.toLowerCase().slice(0, 60)
+        return t && !seen.has(sig) && seen.add(sig)
+      })
+      .slice(0, 3)
+  }
   return createPortal(
     <div className="pm" onClick={onClose} role="dialog" aria-modal="true">
       <div className="pm-box cat-detail" onClick={(ev) => ev.stopPropagation()}>
@@ -250,14 +267,34 @@ function CountryDetail({ e, type, onClose }: { e: Entry; type: string; onClose: 
         <div className="pm-body cat-detail-body">
           {e.all.map((o) => {
             const save = objectItem(o)
+            const texts = textsOf(o)
+            const label = [o.variant !== 'main' ? VARIANT_LABEL[o.variant] : 'Principal', o.region].filter(Boolean).join(' · ')
             return (
-              <div key={o.id} className="cat-version">
+              <article key={o.id} className="cat-version">
                 {o.img && <Img className="cat-version-img" src={o.img} size="img" sizes="(max-width: 700px) 92vw, 420px" />}
-                <div>
-                  <ObjectCard obj={o} map={map} traitCount={traitCount} />
+                <div className="cat-version-text">
+                  <span className="eyebrow">{label}</span>
+                  {texts.length > 0 ? texts.map((t, i) => <HintText key={i} text={t} />) : file === undefined ? <p className="muted small">Cargando…</p> : <p className="muted small">{o.features.join(' · ')}</p>}
+                  {o.confusedWith.length > 0 && (
+                    <div className="cat-twins">
+                      <span className="muted small">Se confunde con</span>
+                      {o.confusedWith.map((c) => (
+                        <p key={c.country} className="small">
+                          <Link to={`/duelo?a=${e.cc}&b=${c.country}`} onClick={onClose}>{countryFlag(map, c.country)} {countryLabel(map, c.country)}</Link>
+                          {c.difference ? ` — ${c.difference}` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {o.alsoIn.length > 0 && (
+                    <div className="chips">
+                      <span className="muted small">También en</span>
+                      {o.alsoIn.map((c) => <CountryChip key={c} code={c} map={map} />)}
+                    </div>
+                  )}
                   {save && <SaveButton item={save} />}
                 </div>
-              </div>
+              </article>
             )
           })}
           <div className="row cat-detail-links">

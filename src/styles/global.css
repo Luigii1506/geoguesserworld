@@ -1931,3 +1931,74 @@ kbd {
 .cat-facets-toggle { margin-bottom: 0.8rem; }
 .cat-facets-foot { gap: 1rem; }
 .cat-map .setting-inline { max-width: 320px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Consistencia (2026-10): un solo criterio de imagen y de espaciado en toda la app
+   · objetos en cuadrícula (fotos de Explorar, mosaicos de la guía, catálogo): marco
+     cuadrado igual para todas y la foto entera dentro (recortarla quitaría lo que importa:
+     el reflector de un bolardo está arriba)
+   · fotos de una pista: tira de altura fija que se desliza en el móvil; si es una sola,
+     entera, con un alto máximo
+   ══════════════════════════════════════════════════════════════════════════ */
+.photo-grid .shot, .tiles .shot, .gallery .shot { aspect-ratio: 1 / 1; }
+.photo-grid .shot img, .tiles .shot img, .gallery .shot img { object-fit: contain; }
+.cat-img { aspect-ratio: 1 / 1; }
+.cat-img img { object-fit: contain; }
+/* una sola foto en una pista: entera, sin pasar de un alto razonable */
+.strip-one .shot img { max-height: 420px; }
+.tile-more { aspect-ratio: 1 / 1; }
+
+.photo-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem 0.7rem; }
+.photo-caption > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-text { -webkit-line-clamp: 2; }
+
+@media (max-width: 700px) {
+  /* tira deslizable: todas a la misma altura */
+  .strip { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip .shot { flex: none; height: 200px; width: auto; scroll-snap-align: start; }
+  .strip .shot img { width: auto; height: 100%; max-width: 78vw; object-fit: cover; }
+  .strip .shot-more { width: 110px; height: 200px; }
+  .strip-one { margin: 0; padding: 0; }
+  .strip-one .shot { width: 100%; height: auto; }
+  .strip-one .shot img { width: 100%; height: auto; max-width: none; max-height: 56vh; object-fit: contain; }
+
+  .photo-grid { grid-template-columns: 1fr 1fr; gap: 0.8rem 0.5rem; }
+  .photo-caption { font-size: 0.8rem; }
+  .tiles { grid-template-columns: 1fr 1fr; gap: 0.6rem 0.5rem; }
+  .gallery, .hint .gallery { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+
+  /* tipografía del móvil: titulares y entradillas más contenidos */
+  .page-head h1 { font-size: 2rem; }
+  .lead { font-size: 1rem; line-height: 1.5; }
+  .toolbar .select { flex: 1 1 100%; width: 100%; }
+}
+
+/* ── guía de un país: cabecera compacta ── */
+.cg-stats-line { margin: 0; font-size: 0.95rem; color: var(--ink-2); }
+.cg-stats-line strong { color: var(--ink); font-weight: 600; }
+.cg-actions { flex-wrap: wrap; }
+.cg-twins { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0; font-size: 0.88rem; }
+.cg-twins .muted { margin-right: 0.2rem; }
+.topic-facts-line { display: flex; flex-wrap: wrap; gap: 0.2rem 1.2rem; margin: -0.4rem 0 1rem; font-size: 0.86rem; color: var(--ink-2); }
+.topic-facts-line em { font-style: normal; color: var(--ink-3); }
+.lib-quick .fx-pill span, .lib-mrow .fx-pill span { font-family: var(--font-mono); font-size: 0.7rem; opacity: 0.7; margin-left: 0.2rem; }
+.lib-mrow .fx-pill { height: 34px; display: inline-flex; align-items: center; }
+@media (max-width: 999px) {
+  .cg-hero { grid-template-columns: 1fr; gap: 1.2rem; margin-bottom: 1.2rem; }
+  /* la ficha resumen de Plonk It, más pequeña: se amplía al tocarla */
+  .cg-summary { max-width: 360px; }
+  .cg-summary img { max-height: 240px; object-fit: contain; }
+  .cg-hero .guide-name h1 { font-size: 2.2rem; }
+  .cg-hero .guide-name .flag { font-size: 2rem; }
+  .lib-topic-head { margin-bottom: 0.6rem; }
+  .lib-topic-head h2 { font-size: 1.45rem; }
+}
+.cat-version-text { display: grid; gap: 0.6rem; align-content: start; }
+.cat-version-text .hint-text { font-size: 0.95rem; }
+.cat-twins { display: grid; gap: 0.2rem; padding-top: 0.4rem; border-top: 1px solid var(--line); }
+.cat-twins p { margin: 0; color: var(--ink-2); }
+/* catálogo: tarjetas de la misma altura en cada fila */
+.cat-tile { height: 100%; }
+.cat-body { align-content: start; }
+@media (max-width: 600px) { .cat-attrs > span:nth-child(n + 3) { display: none; } }
