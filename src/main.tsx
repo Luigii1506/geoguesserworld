@@ -6,6 +6,12 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import './styles/global.css'
 import App from './App'
+import { reloadForNewVersion } from './lib/staleChunk'
+
+// una página de la versión anterior que ya no existe (se publicó con la app abierta): a la nueva
+window.addEventListener('vite:preloadError', (e) => {
+  if (reloadForNewVersion()) e.preventDefault()
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

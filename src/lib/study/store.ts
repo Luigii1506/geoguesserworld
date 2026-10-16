@@ -56,19 +56,31 @@ async function readState(owner: string): Promise<StudyState | null> {
   }
 }
 let saveTimer = 0
+let unsaved: StudyState | null = null
+async function write(snapshot: StudyState) {
+  if (!snapshot.owner) return
+  try {
+    const db = await idb()
+    db.transaction(STORE, 'readwrite').objectStore(STORE).put({ ...snapshot, ready: false }, snapshot.owner)
+  } catch {
+    /* sin almacenamiento: sigue en memoria */
+  }
+}
 function persist() {
   window.clearTimeout(saveTimer)
-  const snapshot = state
-  saveTimer = window.setTimeout(async () => {
-    if (!snapshot.owner) return
-    try {
-      const db = await idb()
-      db.transaction(STORE, 'readwrite').objectStore(STORE).put({ ...snapshot, ready: false }, snapshot.owner)
-    } catch {
-      /* sin almacenamiento: sigue en memoria */
-    }
+  unsaved = state
+  saveTimer = window.setTimeout(() => {
+    if (unsaved) void write(unsaved)
+    unsaved = null
   }, 300)
 }
+// al recargar o cerrar la pestaña, lo pendiente se guarda ya (no tras los 300 ms)
+if (typeof window !== 'undefined')
+  window.addEventListener('pagehide', () => {
+    window.clearTimeout(saveTimer)
+    if (unsaved) void write(unsaved)
+    unsaved = null
+  })
 
 function commit(next: StudyState) {
   state = next
