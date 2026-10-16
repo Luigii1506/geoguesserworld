@@ -4,6 +4,7 @@ import { useStudy } from '../lib/study/store'
 import { dueCount } from '../lib/study/cards'
 import { setLang, useLang } from '../lib/i18n'
 import { useUser } from '../lib/auth'
+import { ICONS, MobileMenu, type MenuGroup } from './MobileMenu'
 
 // Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
 const NAV = [
@@ -55,10 +56,51 @@ export default function Layout() {
     else nav.clearAppBadge?.().catch(() => {})
   }, [due, study.ready])
 
+  // el menú del móvil, por grupos (en escritorio, la barra superior)
+  const groups: MenuGroup[] = [
+    {
+      title: 'Aprender',
+      items: [
+        { to: '/', label: 'Inicio', icon: ICONS.home, match: (p) => p === '/' },
+        { to: '/paises', label: 'Países', icon: ICONS.countries, match: (p) => p.startsWith('/pais/') },
+        { to: '/catalogo', label: 'Catálogo', icon: ICONS.catalog },
+        { to: '/duelo', label: 'Duelos', icon: ICONS.duel },
+        { to: '/entrenar', label: 'Entrenar', icon: ICONS.train, count: due },
+      ],
+    },
+    {
+      title: 'Explorar',
+      items: [
+        { to: '/geografia', label: 'Geografía', icon: ICONS.geography },
+        { to: '/mapas', label: 'Mapas', icon: ICONS.maps },
+        { to: '/buscar', label: '¿Dónde estoy?', icon: ICONS.search },
+        { to: '/explorar', label: 'Fotos', icon: ICONS.photos },
+      ],
+    },
+  ]
+  const nextTheme = () => setTheme((t) => (t === 'auto' ? 'light' : t === 'light' ? 'dark' : 'auto'))
+  const drawerFoot = (
+    <>
+      <NavLink to="/fuentes" className="drawer-item">
+        <span className="drawer-icon" aria-hidden="true">{ICONS.sources}</span><span>Fuentes y licencias</span>
+      </NavLink>
+      <button className="drawer-item" onClick={nextTheme}>
+        <span className="drawer-icon" aria-hidden="true">◐</span><span>Tema: {THEME_LABEL[theme].toLowerCase()}</span>
+      </button>
+      {user && (
+        <button className="drawer-item drawer-out" onClick={signOut}>
+          <span className="drawer-icon" aria-hidden="true">↩</span>
+          <span>Salir<small>{user.email}</small></span>
+        </button>
+      )}
+    </>
+  )
+
   return (
     <>
       <header className="topbar">
         <div className="topbar-inner">
+          <MobileMenu groups={groups} footer={drawerFoot} due={due} />
           <Link to="/" className="brand">GeoMastery</Link>
           <nav className="nav">
             {NAV.map((item) => (
@@ -78,11 +120,7 @@ export default function Layout() {
               <button className={lang === 'es' ? 'on' : ''} onClick={() => setLang('es')}>ES</button>
               <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
             </div>
-            <button
-              className="btn btn-quiet theme"
-              onClick={() => setTheme((t) => (t === 'auto' ? 'light' : t === 'light' ? 'dark' : 'auto'))}
-              title="Tema"
-            >
+            <button className="btn btn-quiet theme" onClick={nextTheme} title="Tema">
               {THEME_LABEL[theme]}
             </button>
             {user && (
