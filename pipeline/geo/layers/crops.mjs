@@ -60,17 +60,22 @@ function cropFiles(zip) {
   return out
 }
 
+const spam2020 = () => {
+  const dir = rawDir('mapspam')
+  const prod = path.join(dir, 'spam2020V2r2_global_production.geotiff.zip')
+  const harv = path.join(dir, 'spam2020V2r2_global_harvested_area.geotiff.zip')
+  return existsSync(prod) && existsSync(harv) ? { prod, harv } : null
+}
+
 /** Versión disponible: 2020 si la descargaste tú (pide registro en Dataverse), si no 2010. */
 async function edition() {
-  const dir = rawDir('mapspam')
-  const v2020 = path.join(dir, 'spam2020V2r2_global_production.geotiff.zip')
-  const h2020 = path.join(dir, 'spam2020V2r2_global_harvested_area.geotiff.zip')
+  const v2020 = spam2020()
   const pick = (year, prod, harv) => {
     const P = cropFiles(prod)
     const H = cropFiles(harv)
     return { year, file: (kind, crop) => (kind === 'P' ? P : H)[crop] ?? null }
   }
-  if (existsSync(v2020) && existsSync(h2020)) return pick(2020, v2020, h2020)
+  if (v2020) return pick(2020, v2020.prod, v2020.harv)
   const prod = await download('mapspam', 'https://dataverse.harvard.edu/api/access/datafile/3985009', 'spam2010v2r0_global_prod.geotiff.zip')
   const harv = await download('mapspam', 'https://dataverse.harvard.edu/api/access/datafile/3985008', 'spam2010v2r0_global_harv_area.geotiff.zip')
   return pick(2010, prod, harv)
@@ -82,6 +87,8 @@ const source = {
   url: 'https://www.mapspam.info',
   license: 'CC BY 4.0 (IFPRI)',
   attribution: 'International Food Policy Research Institute: Global Spatially-Disaggregated Crop Production Statistics Data (SPAM), Harvard Dataverse',
+  // también sin prepare() (geo build aplica las capas ya calculadas)
+  version: spam2020() ? '2020 v2r2' : '2010 v2r0',
 }
 
 /** Ráster de un cultivo remuestreado a la rejilla gruesa (1/12°), como matriz. */
@@ -137,7 +144,6 @@ export const crops = {
 
   async prepare() {
     const ed = await edition()
-    source.version = String(ed.year)
     await dominantGrid(ed)
   },
 

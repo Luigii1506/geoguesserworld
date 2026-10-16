@@ -7,7 +7,9 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { ROOT } from '../../lib/paths.mjs'
+import { WORK } from '../lib/dirs.mjs'
 
 export const meta = {
   id: 'guides',
@@ -30,8 +32,8 @@ export async function ingest(store, ctx) {
   if (!visual || !quiz) return ctx.log('falta public/community (npm run pipeline -- export)')
   // la posición aleatoria de cada pregunta (r) se conserva entre reconstrucciones: cambiarla
   // no aporta nada y, como está en tres índices, costaría ~4 escrituras de D1 por pregunta
-  const hasR = db.prepare('PRAGMA table_info(gg_quiz)').all().some((c) => c.name === 'r')
-  const keepR = new Map(hasR ? db.prepare('SELECT key, r FROM gg_quiz').all().map((x) => [x.key, x.r]) : [])
+  // (geo build parte de una base vacía: entonces se toma de lo publicado en D1)
+  const keepR = previousR(db)
   const rOf = (key) => keepR.get(key) ?? Math.random()
   db.exec('DELETE FROM gg_photo; DELETE FROM gg_quiz')
   const name = new Map(db.prepare('SELECT cc, name FROM country').all().map((r) => [r.cc, r.name]))
@@ -49,4 +51,17 @@ export async function ingest(store, ctx) {
   for (const p of quiz.photos) q.run(`p:${p.id}:${p.i}`, 'photo', p.c, p.k, p.sk ?? null, null, rOf(`p:${p.id}:${p.i}`), JSON.stringify(p))
   store.meta('guides_categories', visual.categories)
   ctx.log(`✓ ${visual.items.length} fotos del explorador · ${quiz.texts.length + quiz.photos.length} preguntas`)
+}
+
+/** El r de cada pregunta: de esta base o, si está vacía, de la copia de lo publicado en D1. */
+function previousR(db) {
+  const read = (d) => (d.prepare('PRAGMA table_info(gg_quiz)').all().some((c) => c.name === 'r') ? d.prepare('SELECT key, r FROM gg_quiz').all() : [])
+  let rows = read(db)
+  const snapshot = path.join(WORK, 'd1-published.db')
+  if (!rows.length && existsSync(snapshot)) {
+    const pub = new DatabaseSync(snapshot, { readOnly: true })
+    rows = read(pub)
+    pub.close()
+  }
+  return new Map(rows.map((x) => [x.key, x.r]))
 }

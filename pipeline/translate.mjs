@@ -85,7 +85,15 @@ export async function translate(db, { model = 'deepseek-flash', limit = Infinity
       `SELECT h.id, h.text FROM clusters c JOIN hints h ON h.id = c.canonical_id
        WHERE COALESCE(c.quality, 'ok') = 'ok' AND length(h.text) > 0
          AND h.id NOT IN (SELECT hint_id FROM hint_translations WHERE lang = 'es' AND version = ?)
-       ORDER BY h.country_code, h.id`,
+       UNION
+       -- el pie de foto de una imagen del índice visual, aunque su grupo no sea útil como pista
+       -- (global, basura): la foto se ve igual, y su texto no tiene otra traducción que heredar
+       SELECT h.id, h.text FROM hints h
+       WHERE length(h.text) > 0 AND EXISTS (SELECT 1 FROM hint_images i WHERE i.hint_id = h.id)
+         AND NOT EXISTS (SELECT 1 FROM hint_translations t WHERE t.hint_id = h.id AND t.lang = 'es')
+         AND NOT EXISTS (SELECT 1 FROM cluster_members m JOIN clusters c ON c.id = m.cluster_id
+                           JOIN hint_translations t ON t.hint_id = c.canonical_id AND t.lang = 'es' WHERE m.hint_id = h.id)
+       ORDER BY 1`,
     )
     .all(TRANSLATE_VERSION)
   if (Number.isFinite(limit)) pending.sort(() => Math.random() - 0.5)
