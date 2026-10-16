@@ -28,6 +28,11 @@ export async function ingest(store, ctx) {
   const visual = read('visual-index.json')
   const quiz = read('quiz.json')
   if (!visual || !quiz) return ctx.log('falta public/community (npm run pipeline -- export)')
+  // la posición aleatoria de cada pregunta (r) se conserva entre reconstrucciones: cambiarla
+  // no aporta nada y, como está en tres índices, costaría ~4 escrituras de D1 por pregunta
+  const hasR = db.prepare('PRAGMA table_info(gg_quiz)').all().some((c) => c.name === 'r')
+  const keepR = new Map(hasR ? db.prepare('SELECT key, r FROM gg_quiz').all().map((x) => [x.key, x.r]) : [])
+  const rOf = (key) => keepR.get(key) ?? Math.random()
   db.exec('DELETE FROM gg_photo; DELETE FROM gg_quiz')
   const name = new Map(db.prepare('SELECT cc, name FROM country').all().map((r) => [r.cc, r.name]))
   const photo = db.prepare('INSERT INTO gg_photo (id, cc, place, src, k, sk, text, img, link, sort_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -40,8 +45,8 @@ export async function ingest(store, ctx) {
     db.exec(readFileSync(path.join(ROOT, 'geo', 'schema.sql'), 'utf8'))
   }
   const q = db.prepare('INSERT OR REPLACE INTO gg_quiz (key, kind, cc, k, sk, u, r, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-  for (const t of quiz.texts) q.run(`t:${t.id}`, 'text', t.c, t.k, t.sk ?? null, t.u ?? null, Math.random(), JSON.stringify(t))
-  for (const p of quiz.photos) q.run(`p:${p.id}:${p.i}`, 'photo', p.c, p.k, p.sk ?? null, null, Math.random(), JSON.stringify(p))
+  for (const t of quiz.texts) q.run(`t:${t.id}`, 'text', t.c, t.k, t.sk ?? null, t.u ?? null, rOf(`t:${t.id}`), JSON.stringify(t))
+  for (const p of quiz.photos) q.run(`p:${p.id}:${p.i}`, 'photo', p.c, p.k, p.sk ?? null, null, rOf(`p:${p.id}:${p.i}`), JSON.stringify(p))
   store.meta('guides_categories', visual.categories)
   ctx.log(`✓ ${visual.items.length} fotos del explorador · ${quiz.texts.length + quiz.photos.length} preguntas`)
 }

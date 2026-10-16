@@ -2234,3 +2234,8 @@ kbd {
   .saved-head .btn { width: 100%; }
   .saved-card-text { font-size: 0.82rem; }
 }
+
+/* muestras de color: con borde, para que el negro se vea en oscuro y el blanco en claro */
+.swatch { box-shadow: 0 0 0 1px var(--line-2); }
+/* ficha del catálogo: la foto de cada versión, sin ocupar toda la pantalla */
+.cat-version-img { max-height: 52vh; object-fit: contain; }

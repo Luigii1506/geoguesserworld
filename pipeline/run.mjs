@@ -23,6 +23,7 @@ import { dedup } from './dedup.mjs'
 import { semantic } from './semantic.mjs'
 import { review } from './review.mjs'
 import { translate } from './translate.mjs'
+import { translatePhrases } from './translate-phrases.mjs'
 import { extractAttributes, computeTraitStats } from './attributes.mjs'
 import { find } from './find.mjs'
 import { verifyTraits } from './verify.mjs'
@@ -138,6 +139,7 @@ const stages = {
   semantic: () => semantic(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   review: () => review(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   translate: () => translate(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
+  'translate-phrases': () => translatePhrases(db, { model: flag('model') }),
   // --countries hu,hr,it  --categories bollards,road_lines  (para pruebas)
   attributes: () =>
     extractAttributes(db, {

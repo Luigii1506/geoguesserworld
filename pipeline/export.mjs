@@ -5,6 +5,7 @@
 // Todo bajo public/community/ (fuera de git, uso personal).
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { phraseTranslator } from './translate-phrases.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { GEO_DB } from './geo/store.mjs'
@@ -144,9 +145,16 @@ export function exportAll(db) {
   )
 
   // ── índice visual: una entrada por imagen ──
+  // el texto, en español: la traducción de la pista o, si es una copia, la de la pista canónica de su grupo
+  const visualTr = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'hint_translations'").get()
   const rows = db.prepare(`
     SELECT h.id, h.source_id, h.country_code, h.country_raw, h.category, h.subcategory,
-           h.text, h.location_url, h.url, i.url AS image
+           ${visualTr ? `COALESCE(
+             (SELECT t.text FROM hint_translations t WHERE t.hint_id = h.id AND t.lang = 'es'),
+             (SELECT t.text FROM cluster_members m JOIN clusters c ON c.id = m.cluster_id
+                JOIN hint_translations t ON t.hint_id = c.canonical_id AND t.lang = 'es' WHERE m.hint_id = h.id LIMIT 1),
+             h.text)` : 'h.text'} AS text,
+           h.location_url, h.url, i.url AS image
     FROM hints h JOIN hint_images i ON i.hint_id = h.id
     ORDER BY h.country_code, h.category, h.source_id, h.id, i.ord`).all()
   const items = rows.map((r) => ({
@@ -292,6 +300,8 @@ export function exportAll(db) {
       }
       return null
     }
+    // rasgos y diferencias en español (pipeline/translate-phrases.mjs; sin traducción, el original)
+    const es = phraseTranslator(db)
     const objects = db.prepare('SELECT * FROM meta_objects ORDER BY type, country_code, variant').all().map((o) => ({
       id: o.id,
       country: o.country_code,
@@ -299,11 +309,11 @@ export function exportAll(db) {
       variant: o.variant,
       region: o.region,
       attrs: JSON.parse(o.attrs),
-      features: JSON.parse(o.features),
+      features: JSON.parse(o.features).map(es),
       hints: JSON.parse(o.hint_ids),
       img: objectImage(JSON.parse(o.hint_ids)),
       alsoIn: rels.all(o.id).filter((r) => r.relation === 'also_in').map((r) => r.other_country),
-      confusedWith: rels.all(o.id).filter((r) => r.relation === 'confused_with').map((r) => ({ country: r.other_country, difference: r.note })),
+      confusedWith: rels.all(o.id).filter((r) => r.relation === 'confused_with').map((r) => ({ country: r.other_country, difference: r.note ? es(r.note) : null })),
       sameDesign: matches.all(o.id).map((m) => ({ country: m.other_country, shared: m.shared, total: m.total })),
     }))
     const traits = db.prepare('SELECT type, key, value, n, countries FROM trait_stats ORDER BY type, key, n').all()
