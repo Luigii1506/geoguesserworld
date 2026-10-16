@@ -168,8 +168,9 @@ function geoApi(): Plugin {
 //   · las cuentas (/api/auth) y Entrenar (POST) no pasan por la caché
 // Las fotos de Wikimedia (otro origen, respuestas opacas) se quedan en la caché HTTP del
 // navegador: en la del service worker ocuparían ~7 MB cada una.
-const path = (url: URL) => url.pathname
-const versioned = (url: URL) => url.searchParams.has('v')
+// Ojo: Workbox copia el texto de cada urlPattern dentro de sw.js, sin lo que lo rodea. Las
+// funciones de las reglas no pueden usar nada de este archivo (variables ni funciones): solo
+// sus argumentos. Las opciones (days) sí, porque se evalúan al construir.
 const days = (n: number) => n * 86400
 const pwa = VitePWA({
   registerType: 'autoUpdate',
@@ -199,37 +200,37 @@ const pwa = VitePWA({
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
-        urlPattern: ({ url, sameOrigin }) => sameOrigin && path(url).startsWith('/assets/'),
+        urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/assets/'),
         handler: 'CacheFirst',
         options: { cacheName: 'assets', expiration: { maxEntries: 20 }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url, sameOrigin }) => sameOrigin && /^\/(img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(webp|avif)$/.test(path(url)),
+        urlPattern: ({ url, sameOrigin }) => sameOrigin && /^\/(img|thumb|sm)\/[0-9a-f]{2}\/[0-9a-f]{40}\.(webp|avif)$/.test(url.pathname),
         handler: 'CacheFirst',
         options: { cacheName: 'photos', expiration: { maxEntries: 3000, maxAgeSeconds: days(120), purgeOnQuotaError: true }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && !path(url).startsWith('/api/auth/') && versioned(url),
+        urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/') && url.searchParams.has('v'),
         handler: 'CacheFirst',
         options: { cacheName: 'api', expiration: { maxEntries: 800, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url, request }) => request.method === 'GET' && path(url).startsWith('/api/') && !path(url).startsWith('/api/auth/'),
+        urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
         handler: 'NetworkFirst',
         options: { cacheName: 'api-live', networkTimeoutSeconds: 4, expiration: { maxEntries: 200, maxAgeSeconds: days(7) }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url }) => path(url).endsWith('/community/manifest.json'),
+        urlPattern: ({ url }) => url.pathname.endsWith('/community/manifest.json'),
         handler: 'NetworkFirst',
         options: { cacheName: 'community-manifest', networkTimeoutSeconds: 3, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url }) => path(url).startsWith('/community/'),
+        urlPattern: ({ url }) => url.pathname.startsWith('/community/'),
         handler: 'CacheFirst',
         options: { cacheName: 'community', expiration: { maxEntries: 400, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
       },
       {
-        urlPattern: ({ url }) => path(url).startsWith('/atlas/') && path(url).endsWith('.json') && versioned(url),
+        urlPattern: ({ url }) => url.pathname.startsWith('/atlas/') && url.pathname.endsWith('.json') && url.searchParams.has('v'),
         handler: 'CacheFirst',
         options: { cacheName: 'atlas', expiration: { maxEntries: 300, maxAgeSeconds: days(60) }, cacheableResponse: { statuses: [200] } },
       },
