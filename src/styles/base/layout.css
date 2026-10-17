@@ -11,14 +11,56 @@
 }
 .brand { font-family: var(--font-display); font-weight: 600; font-size: 1.12rem; color: var(--ink); letter-spacing: -0.01em; white-space: nowrap; }
 .brand:hover { text-decoration: none; }
-.nav { display: flex; gap: 0.15rem; overflow-x: auto; scrollbar-width: none; }
-.nav::-webkit-scrollbar { display: none; }
+.nav { display: flex; gap: 0.15rem; align-items: center; }
 .nav a { color: var(--ink-2); font-size: 0.92rem; padding: 0.4rem 0.7rem; border-radius: var(--r); white-space: nowrap; position: relative; }
 .nav a:hover { color: var(--ink); background: var(--sunken); text-decoration: none; }
 .nav a.active { color: var(--ink); font-weight: 600; }
 .nav a.active::after { content: ''; position: absolute; left: 0.7rem; right: 0.7rem; bottom: -9px; height: 2px; background: var(--ink); border-radius: 2px; }
 .nav .count { margin-left: 0.35rem; font-size: 0.7rem; background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 0 0.4rem; }
 .topbar-tools { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+/* menús desplegables de la barra (components/NavMenu.tsx) */
+.navmenu { position: relative; }
+.navmenu-btn {
+  display: inline-flex; align-items: center; gap: 0.3rem; border: none; background: none; font: inherit; font-size: 0.92rem;
+  color: var(--ink-2); padding: 0.4rem 0.7rem; border-radius: var(--r); cursor: pointer; white-space: nowrap; position: relative;
+}
+.navmenu-btn:hover, .navmenu.open .navmenu-btn { color: var(--ink); background: var(--sunken); }
+.navmenu-btn svg { transition: transform 0.2s ease; opacity: 0.7; }
+.navmenu.open .navmenu-btn svg { transform: rotate(180deg); }
+.navmenu-btn.active { color: var(--ink); font-weight: 600; }
+.navmenu-btn.active::after { content: ''; position: absolute; left: 0.7rem; right: 0.7rem; bottom: -9px; height: 2px; background: var(--ink); border-radius: 2px; }
+/* el panel cuelga del botón; un margen invisible arriba evita que se cierre al bajar el ratón */
+.navmenu-panel {
+  position: absolute; top: calc(100% + 8px); z-index: 40; min-width: 300px; max-width: 360px; padding: 0.4rem;
+  display: grid; gap: 0.1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.35); animation: navmenu-in 0.14s ease-out;
+}
+.navmenu-panel[hidden] { display: none; }
+.navmenu-panel::before { content: ''; position: absolute; left: 0; right: 0; top: -10px; height: 10px; }
+.navmenu-left { left: 0; }
+.navmenu-right { right: 0; }
+@keyframes navmenu-in { from { opacity: 0; transform: translateY(-4px); } }
+.navmenu-item {
+  display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.55rem 0.65rem; border-radius: var(--r); color: var(--ink);
+  border: none; background: none; font: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+.navmenu-item:hover, .navmenu-item:focus-visible { background: var(--sunken); text-decoration: none; }
+.navmenu-item.on { background: var(--accent-soft); }
+.navmenu-item.on strong { color: var(--accent); }
+.navmenu-icon { flex: none; width: 20px; height: 20px; display: grid; place-items: center; color: var(--ink-2); margin-top: 1px; }
+.navmenu-text { display: grid; gap: 0.1rem; min-width: 0; }
+.navmenu-text strong { font-size: 0.9rem; font-weight: 600; }
+.navmenu-text small { font-size: 0.78rem; color: var(--ink-3); line-height: 1.35; }
+.navmenu-text .count { margin-left: 0.35rem; font-size: 0.7rem; background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 0 0.4rem; }
+/* el menú de «más opciones»: un círculo con la inicial */
+.navmenu-more .navmenu-btn { padding: 0.2rem 0.35rem 0.2rem 0.2rem; }
+.navmenu-avatar {
+  width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--bg);
+  font-size: 0.8rem; font-weight: 700;
+}
+.navmenu-more .navmenu-panel { min-width: 260px; }
+.navmenu-who { margin: 0; padding: 0.45rem 0.65rem 0.5rem; font-size: 0.78rem; color: var(--ink-3); border-bottom: 1px solid var(--line); margin-bottom: 0.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) { .navmenu-more { display: none; } }
 .page { max-width: var(--page); margin: 0 auto; padding: 2.2rem 24px 5rem; }
 .page-narrow { max-width: 780px; }
 .page-head { margin-bottom: 2rem; display: grid; gap: 0.5rem; }
@@ -31,7 +73,6 @@
 }
 @media (max-width: 760px) {
   .brand { font-size: 1rem; }
-  .topbar-tools .theme { display: none; }
 }
 /* ── Guía de país ── */
 .crumbs { font-size: 0.85rem; color: var(--ink-3); margin-bottom: 1.2rem; }
@@ -55,7 +96,7 @@
 .menu-btn { display: none; }
 .drawer { display: none; }
 @media (max-width: 760px) {
-  .nav, .topbar-tools .signout { display: none; }
+  .nav { display: none; }
   .page { padding-bottom: 2.5rem; }
   .topbar-inner { gap: 0.5rem; }
   .menu-btn {

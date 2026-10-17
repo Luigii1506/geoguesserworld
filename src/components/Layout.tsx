@@ -5,22 +5,26 @@ import { dueCount } from '../lib/study/cards'
 import { setLang, useLang } from '../lib/i18n'
 import { useUser } from '../lib/auth'
 import { ICONS, MobileMenu, type MenuGroup } from './MobileMenu'
+import { NavMenu } from './NavMenu'
 import { GlobalSearch } from './GlobalSearch'
 import { Loading } from './ui'
 import { isIos, useInstall, useOnline } from '../lib/install'
 
-// Navegación en el orden del plan: estudiar → identificar / distinguir gemelos → entrenar.
-const NAV = [
-  { to: '/paises', label: 'Países' },
-  { to: '/catalogo', label: 'Catálogo' },
-  { to: '/guias', label: 'Guías' },
-  { to: '/mapas', label: 'Mapas' },
-  { to: '/geografia', label: 'Geografía' },
-  { to: '/buscar', label: 'Buscar' },
-  { to: '/duelo', label: 'Duelos' },
-  { to: '/guardados', label: 'Guardados' },
-  { to: '/entrenar', label: 'Entrenar' },
+// Navegación por grupos, la misma en el escritorio (barra con menús desplegables) y en el
+// móvil (menú lateral): lo de cada día suelto (Países, Guardados, Entrenar) y el resto en
+// «Aprender» y «Explorar», con una línea que dice para qué sirve cada sección.
+const LEARN = [
+  { to: '/catalogo', label: 'Catálogo', desc: 'Cada objeto (bolardos, postes, matrículas…) en todos los países', icon: ICONS.catalog },
+  { to: '/duelo', label: 'Duelos', desc: 'Los países gemelos, foto contra foto', icon: ICONS.duel },
+  { to: '/guias', label: 'Guías externas', desc: 'Documentos y mapas de la comunidad por país', icon: ICONS.guides },
 ]
+const EXPLORE = [
+  { to: '/buscar', label: '¿Dónde estoy?', desc: 'Marca lo que ves y descarta países', icon: ICONS.search },
+  { to: '/geografia', label: 'Geografía', desc: 'Ciudades, volcanes, ríos y relieve de cada país', icon: ICONS.geography },
+  { to: '/mapas', label: 'Mapas', desc: 'Un rasgo en el mapa del mundo: conducción, escritura…', icon: ICONS.maps },
+  { to: '/explorar', label: 'Fotos', desc: 'Todas las fotos de un tema, país por país', icon: ICONS.photos },
+]
+const inCountry = (p: string) => p.startsWith('/pais/')
 
 type Theme = 'auto' | 'light' | 'dark'
 const THEME_LABEL: Record<Theme, string> = { auto: 'Auto', light: 'Claro', dark: 'Oscuro' }
@@ -93,29 +97,19 @@ export default function Layout() {
     else nav.clearAppBadge?.().catch(() => {})
   }, [due, study.ready])
 
-  // el menú del móvil, por grupos (en escritorio, la barra superior)
+  // el menú del móvil, con los mismos grupos que la barra del escritorio
   const groups: MenuGroup[] = [
     {
-      title: 'Aprender',
+      title: 'Estudiar',
       items: [
         { to: '/', label: 'Inicio', icon: ICONS.home, match: (p) => p === '/' },
-        { to: '/paises', label: 'Países', icon: ICONS.countries, match: (p) => p.startsWith('/pais/') },
-        { to: '/catalogo', label: 'Catálogo', icon: ICONS.catalog },
-        { to: '/guias', label: 'Guías externas', icon: ICONS.guides },
-        { to: '/duelo', label: 'Duelos', icon: ICONS.duel },
+        { to: '/paises', label: 'Países', icon: ICONS.countries, match: inCountry },
         { to: '/guardados', label: 'Guardados', icon: ICONS.saved, count: saved },
         { to: '/entrenar', label: 'Entrenar', icon: ICONS.train, count: due },
       ],
     },
-    {
-      title: 'Explorar',
-      items: [
-        { to: '/geografia', label: 'Geografía', icon: ICONS.geography },
-        { to: '/mapas', label: 'Mapas', icon: ICONS.maps },
-        { to: '/buscar', label: '¿Dónde estoy?', icon: ICONS.search },
-        { to: '/explorar', label: 'Fotos', icon: ICONS.photos },
-      ],
-    },
+    { title: 'Aprender', items: LEARN },
+    { title: 'Explorar', items: EXPLORE },
   ]
   const nextTheme = () => setTheme((t) => (t === 'auto' ? 'light' : t === 'light' ? 'dark' : 'auto'))
   const drawerFoot = (
@@ -153,18 +147,14 @@ export default function Layout() {
         <div className="topbar-inner">
           <MobileMenu groups={groups} footer={drawerFoot} due={due} />
           <Link to="/" className="brand">GeoMastery</Link>
-          <nav className="nav">
-            {NAV.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                // la guía de un país (/pais/xx) también es parte de "Países"
-                className={({ isActive }) => (isActive || (item.to === '/paises' && location.pathname.startsWith('/pais/')) ? 'active' : '')}
-              >
-                {item.label}
-                {item.to === '/entrenar' && due > 0 && <span className="count">{due}</span>}
-              </NavLink>
-            ))}
+          <nav className="nav" aria-label="Secciones">
+            <NavLink to="/paises" className={({ isActive }) => (isActive || inCountry(location.pathname) ? 'active' : '')}>Países</NavLink>
+            <NavMenu label="Aprender" items={LEARN} />
+            <NavMenu label="Explorar" items={EXPLORE} />
+            <NavLink to="/guardados" className={({ isActive }) => (isActive ? 'active' : '')}>Guardados</NavLink>
+            <NavLink to="/entrenar" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Entrenar{due > 0 && <span className="count">{due}</span>}
+            </NavLink>
           </nav>
           <div className="topbar-tools">
             <GlobalSearch />
@@ -172,14 +162,30 @@ export default function Layout() {
               <button className={lang === 'es' ? 'on' : ''} onClick={() => setLang('es')}>ES</button>
               <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
             </div>
-            <button className="btn btn-quiet theme" onClick={nextTheme} title="Tema">
-              {THEME_LABEL[theme]}
-            </button>
-            {user && (
-              <button className="btn btn-quiet signout" onClick={signOut} title={`Salir (${user.email})`}>
-                Salir
+            {/* lo que se usa poco, en un solo menú: tema, fuentes, instalar y salir */}
+            <NavMenu label="Más opciones" align="right" className="navmenu-more" trigger={<span className="navmenu-avatar">{user?.email?.[0]?.toUpperCase() ?? '⋯'}</span>}>
+              {user && <p className="navmenu-who">{user.email}</p>}
+              <button className="navmenu-item" onClick={nextTheme}>
+                <span className="navmenu-icon" aria-hidden="true">◐</span>
+                <span className="navmenu-text"><strong>Tema: {THEME_LABEL[theme].toLowerCase()}</strong><small>Automático, claro u oscuro</small></span>
               </button>
-            )}
+              <NavLink to="/fuentes" className="navmenu-item">
+                <span className="navmenu-icon" aria-hidden="true">{ICONS.sources}</span>
+                <span className="navmenu-text"><strong>Fuentes y licencias</strong><small>De dónde sale cada dato</small></span>
+              </NavLink>
+              {install.mode === 'prompt' && (
+                <button className="navmenu-item" onClick={() => void install.install()}>
+                  <span className="navmenu-icon" aria-hidden="true">⤓</span>
+                  <span className="navmenu-text"><strong>Instalar la app</strong><small>Abre al instante y funciona sin conexión</small></span>
+                </button>
+              )}
+              {user && (
+                <button className="navmenu-item" onClick={signOut}>
+                  <span className="navmenu-icon" aria-hidden="true">↩</span>
+                  <span className="navmenu-text"><strong>Salir</strong></span>
+                </button>
+              )}
+            </NavMenu>
           </div>
         </div>
       </header>
