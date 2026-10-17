@@ -17,6 +17,7 @@ const Catalog = lazy(() => import('./pages/Catalog'))
 const Saved = lazy(() => import('./pages/Saved'))
 const Train = lazy(() => import('./pages/Train'))
 const Sources = lazy(() => import('./pages/Sources'))
+const ExternalGuides = lazy(() => import('./pages/ExternalGuides'))
 
 // las antiguas páginas de tema y del explorador son ahora la propia guía (una sola página)
 function GuideRedirect() {
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/guardados" element={<Saved />} />
           <Route path="/entrenar" element={<Train />} />
           <Route path="/fuentes" element={<Sources />} />
+          <Route path="/guias" element={<ExternalGuides />} />
           {/* rutas de la versión anterior */}
           <Route path="/visual" element={<Navigate to="/explorar" replace />} />
           <Route path="/repaso" element={<Navigate to="/entrenar" replace />} />

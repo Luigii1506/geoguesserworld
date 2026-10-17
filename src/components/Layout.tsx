@@ -13,6 +13,7 @@ import { isIos, useInstall, useOnline } from '../lib/install'
 const NAV = [
   { to: '/paises', label: 'Países' },
   { to: '/catalogo', label: 'Catálogo' },
+  { to: '/guias', label: 'Guías' },
   { to: '/mapas', label: 'Mapas' },
   { to: '/geografia', label: 'Geografía' },
   { to: '/buscar', label: 'Buscar' },
@@ -100,6 +101,7 @@ export default function Layout() {
         { to: '/', label: 'Inicio', icon: ICONS.home, match: (p) => p === '/' },
         { to: '/paises', label: 'Países', icon: ICONS.countries, match: (p) => p.startsWith('/pais/') },
         { to: '/catalogo', label: 'Catálogo', icon: ICONS.catalog },
+        { to: '/guias', label: 'Guías externas', icon: ICONS.guides },
         { to: '/duelo', label: 'Duelos', icon: ICONS.duel },
         { to: '/guardados', label: 'Guardados', icon: ICONS.saved, count: saved },
         { to: '/entrenar', label: 'Entrenar', icon: ICONS.train, count: due },

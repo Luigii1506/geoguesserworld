@@ -15,6 +15,8 @@ import type { NewItem } from '../lib/study/store'
 import { HintList } from '../components/guide'
 import { CountryTerrain } from '../components/geo/CountryTerrain'
 import { useDragToClose } from '../lib/gestures'
+import { useResources } from '../lib/resources'
+import { ExternalGuideRow } from '../components/ExternalGuide'
 
 // La guía de un país es una sola página: la cabecera (qué es, tu progreso, con quién se
 // confunde) y todas sus pistas, tema por tema, que se van cargando al bajar; al final, el
@@ -207,6 +209,7 @@ export default function CountryGuide() {
   const { code } = useParams()
   const g = useGuide(code)
   const lang = useLang()
+  const external = useResources()?.countries[code ?? '']
   const [params, setParams] = useSearchParams()
   const [sheet, setSheet] = useState<null | 'filtros' | 'region'>(null)
   const [regionQuery, setRegionQuery] = useState('')
@@ -562,16 +565,30 @@ export default function CountryGuide() {
             </>
           )}
 
-          {!filtering && g.file.resources.length > 0 && (
+          {!filtering && (g.file.resources.length > 0 || external) && (
             <section className="cg-chapter" id="recursos">
               <header className="cg-chapter-head"><div><h2>Recursos</h2></div></header>
+              {/* guías de otros jugadores (Regionguessing Meta Library): las recomendadas para empezar y las que más aportan */}
+              {external && (
+                <div className="sub cg-external">
+                  <h3 className="sub-title">Guías de la comunidad para {g.country?.name_es ?? g.country?.name}</h3>
+                  {(() => {
+                    const best = external.items.filter((x) => x.start || x.use === 'new').slice(0, 5)
+                    const list = best.length ? best : external.items.slice(0, 5)
+                    return list.map((x) => <ExternalGuideRow key={x.u + x.t} g={x} />)
+                  })()}
+                  <Link className="btn btn-sm" to={`/guias?pais=${code}`}>
+                    Ver las {external.items.length} guías de {g.country?.name_es ?? g.country?.name} →
+                  </Link>
+                </div>
+              )}
               <div className="resources">
                 {(['practice_map', 'community_doc', 'other'] as const).map((kind) => {
                   const list = g.file!.resources.filter((r) => r.kind === kind)
                   if (!list.length) return null
                   return (
                     <div key={kind} className="sub">
-                      <h3 className="sub-title">{kind === 'practice_map' ? 'Mapas para practicar' : kind === 'community_doc' ? 'Guías de la comunidad' : 'Otros enlaces'}</h3>
+                      <h3 className="sub-title">{kind === 'practice_map' ? 'Mapas para practicar' : kind === 'community_doc' ? 'Otras guías' : 'Otros enlaces'}</h3>
                       <ul className="resource-list">
                         {list.map((r) => (
                           <li key={r.url}>

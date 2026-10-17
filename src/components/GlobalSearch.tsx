@@ -17,6 +17,7 @@ const SECTIONS: { to: string; label: string; words: string }[] = [
   { to: '/', label: 'Inicio', words: 'inicio portada home' },
   { to: '/paises', label: 'Países', words: 'paises guias' },
   { to: '/catalogo', label: 'Catálogo', words: 'catalogo bolardos postes matriculas coche lineas señales' },
+  { to: '/guias', label: 'Guías externas', words: 'guias externas documentos google docs comunidad recursos enlaces regionguessing reddit discord' },
   { to: '/duelo', label: 'Duelos', words: 'duelos gemelos comparar' },
   { to: '/guardados', label: 'Guardados', words: 'guardados favoritos estrella' },
   { to: '/entrenar', label: 'Entrenar', words: 'entrenar repasar examen practica' },

@@ -154,6 +154,22 @@ bases de datos.
 - **Limitaciones:** depende de GeoGuessr (cuenta de pago para uso completo; cambios
   pueden romper el userscript); sin modo de estudio fuera del juego.
 
+## 9. Regionguessing Meta Library — hoja de Google de Lupus (Discord: l.upus)
+
+- **Qué ofrece:** un índice de ~830 guías de la comunidad para 113 países (documentos y
+  presentaciones de Google, mapas, infografías, vídeos, hojas de cálculo), cada una con su
+  autor, tipo, tiempo de lectura, nivel (🌑 para empezar · 🌗 para todos · 🌕 avanzado),
+  utilidad (‼️ mucho nuevo · ❕ algo · ❔ nicho · ❌ desactualizado · ♻️ repite) y 🚩 la
+  recomendada para empezar. Más el mapa de prefijos telefónicos de muchos países.
+  `docs.google.com/spreadsheets/d/1UNvkoY-LaktF75nU_cP7-wVRAEvH3fSqVZet20HqxXA`
+- **Cómo se lee:** se descarga como .xlsx (conserva los hipervínculos de cada celda) y se
+  lee sin dependencias (`pipeline/lib/xlsx.mjs`); `npm run pipeline -- resources`.
+- **Uso en GeoMastery:** solo enlaces, nunca copias. Página «Guías externas» (`#/guias`)
+  y, en la guía de cada país, las recomendadas dentro del capítulo «Recursos». Las
+  descripciones se traducen al español (DeepSeek, con caché en `phrase_translations`).
+- **Limitaciones:** los enlaces a archivos de Discord caducan (la app lo avisa); el autor
+  dice que la actualiza poco. Repetir `resources --refresh` de vez en cuando.
+
 ---
 
 ## Síntesis: qué se enlaza desde cada parte de la app
@@ -168,6 +184,7 @@ bases de datos.
 | Práctica de metas (juego) | GeoHints | `geohints.com/games/bollards` |
 | Práctica in-game con feedback | Learnable Meta | `/docs/getting-started` + `/maps` |
 | Verificar cobertura/generaciones | VirtualStreets | `/index.php/svcoverage/` + RSS |
+| Profundizar en un país (regiones, postes, señales…) | Regionguessing Meta Library | el enlace de cada guía (`#/guias?pais=<cc>`) |
 
 ## Advertencias legales del proyecto
 

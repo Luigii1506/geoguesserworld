@@ -24,6 +24,7 @@ import { semantic } from './semantic.mjs'
 import { review } from './review.mjs'
 import { translate } from './translate.mjs'
 import { translatePhrases } from './translate-phrases.mjs'
+import { resources } from './resources.mjs'
 import { extractAttributes, computeTraitStats } from './attributes.mjs'
 import { find } from './find.mjs'
 import { verifyTraits } from './verify.mjs'
@@ -140,6 +141,8 @@ const stages = {
   review: () => review(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   translate: () => translate(db, { model: flag('model'), limit: flag('limit') ? Number(flag('limit')) : Infinity }),
   'translate-phrases': () => translatePhrases(db, { model: flag('model') }),
+  // guías externas por país (enlaces, de la Regionguessing Meta Library); descripciones con DeepSeek
+  resources: () => resources(db, { refresh, model: flag('model') }),
   // --countries hu,hr,it  --categories bollards,road_lines  (para pruebas)
   attributes: () =>
     extractAttributes(db, {

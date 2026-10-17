@@ -1,6 +1,6 @@
 // Traducción de frases cortas al español (DeepSeek), para lo que no son pistas: los rasgos de
-// los objetos de meta («two black bands») y en qué se diferencian de su gemelo («3 bolts
-// instead of 2»). Cada frase distinta se traduce una vez y se guarda en phrase_translations;
+// los objetos de meta («two black bands»), en qué se diferencian de su gemelo («3 bolts
+// instead of 2») y las descripciones de las guías externas (pipeline/resources.mjs). Cada frase distinta se traduce una vez y se guarda en phrase_translations;
 // la exportación la usa (pipeline/export.mjs, esPhrase).
 //
 //   npm run pipeline -- translate-phrases
@@ -10,8 +10,9 @@ import { createLlm } from './lib/llm.mjs'
 
 export const PHRASES_VERSION = 1
 const PER_CALL = 60
+const CALL_CHARS = 4000 // las descripciones de las guías son más largas: menos por llamada
 
-const SYSTEM = `You translate short descriptive phrases from a GeoGuessr study app into neutral Spanish.
+const SYSTEM = `You translate short descriptive phrases and descriptions from a GeoGuessr study app into neutral Spanish.
 Rules:
 - Translate faithfully; keep it as short as the original. Do not add explanations.
 - Keep unchanged: proper nouns, place names, local words quoted from signs, road codes, numbers, letters or characters being described.
@@ -40,16 +41,28 @@ function phrasesOf(db) {
 }
 
 export async function translatePhrases(db, { model = 'deepseek-flash' } = {}) {
+  await translatePhraseList(db, phrasesOf(db), { model })
+}
+
+/** Traduce (y guarda en phrase_translations) las frases de la lista que aún no estén. */
+export async function translatePhraseList(db, phrases, { model = 'deepseek-flash' } = {}) {
   ensurePhraseTable(db)
   const done = new Set(db.prepare('SELECT src FROM phrase_translations WHERE version = ?').all(PHRASES_VERSION).map((r) => r.src))
-  const todo = phrasesOf(db).filter((p) => !done.has(p))
+  const todo = [...new Set(phrases.map((p) => p.trim()).filter(Boolean))].filter((p) => !done.has(p))
   console.log(`[phrases] ${todo.length} frases por traducir (${done.size} ya en caché)`)
   if (!todo.length) return
   const save = db.prepare(`INSERT INTO phrase_translations (src, es, model, version, translated_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(src) DO UPDATE SET es = excluded.es, model = excluded.model, version = excluded.version, translated_at = excluded.translated_at`)
   const llm = createLlm({ model, concurrency: 10 })
   const batches = []
-  for (let i = 0; i < todo.length; i += PER_CALL) batches.push(todo.slice(i, i + PER_CALL))
+  let cur = []
+  let size = 0
+  for (const p of todo) {
+    if (cur.length && (cur.length >= PER_CALL || size + p.length > CALL_CHARS)) (batches.push(cur), (cur = []), (size = 0))
+    cur.push(p)
+    size += p.length
+  }
+  if (cur.length) batches.push(cur)
   let saved = 0
   let calls = 0
   await Promise.all(

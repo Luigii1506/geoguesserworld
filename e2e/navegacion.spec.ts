@@ -38,7 +38,7 @@ test('volver atrás conserva la posición de la lista', async ({ page }) => {
 })
 
 test('ninguna vista se desborda de lado', async ({ page }) => {
-  for (const h of ['#/', '#/paises', '#/pais/hu', '#/catalogo', '#/guardados', '#/entrenar', '#/explorar', '#/duelo?a=hu&b=sk', '#/buscar', '#/geografia?pais=it', '#/mapas']) {
+  for (const h of ['#/', '#/paises', '#/pais/hu', '#/catalogo', '#/guardados', '#/entrenar', '#/explorar', '#/duelo?a=hu&b=sk', '#/buscar', '#/geografia?pais=it', '#/mapas', '#/guias', '#/guias?pais=us']) {
     await page.goto('/' + h)
     await page.waitForTimeout(1500)
     const [w, sw] = await page.evaluate(() => [document.documentElement.clientWidth, document.documentElement.scrollWidth])
